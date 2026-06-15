@@ -66,6 +66,58 @@
                     </select>
                 </div>
 
+                <div class="upstream-proxy-section">
+                    <div class="hint-box" id="hint-upstream">
+                        To change upstream proxy settings, please turn off the proxy server.
+                    </div>
+
+                    <div class="toggle-container upstream-toggle">
+                        <div class="toggle-text">Use upstream proxy to reach Psiphon servers:</div>
+                        <label class="switch">
+                            <input type="checkbox" id="upstreamProxyEnabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <p class="upstream-proxy-desc">
+                        Routes Psiphon tunnel traffic through your network proxy (HTTP, SOCKS5, or SOCKS4).
+                        Browsers still use the local proxy at 127.0.0.1:8081 when connected.
+                    </p>
+
+                    <div id="upstream-proxy-fields" class="upstream-proxy-fields">
+                        <div class="form-group upstream-form-row">
+                            <label for="upstreamProxyType">Proxy type</label>
+                            <select id="upstreamProxyType">
+                                <option value="http">HTTP (CONNECT)</option>
+                                <option value="socks5">SOCKS5</option>
+                                <option value="socks4a">SOCKS4</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group upstream-form-row upstream-host-port">
+                            <div class="upstream-field-half">
+                                <label for="upstreamProxyHost">Host</label>
+                                <input type="text" id="upstreamProxyHost" placeholder="proxy.example.com" />
+                            </div>
+                            <div class="upstream-field-half">
+                                <label for="upstreamProxyPort">Port</label>
+                                <input type="number" id="upstreamProxyPort" placeholder="8080" min="1" max="65535" />
+                            </div>
+                        </div>
+
+                        <div class="form-group upstream-form-row upstream-host-port">
+                            <div class="upstream-field-half">
+                                <label for="upstreamProxyUsername">Username (optional)</label>
+                                <input type="text" id="upstreamProxyUsername" placeholder="user" autocomplete="off" />
+                            </div>
+                            <div class="upstream-field-half">
+                                <label for="upstreamProxyPassword">Password (optional)</label>
+                                <input type="password" id="upstreamProxyPassword" placeholder="••••••" autocomplete="off" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- EDITED BROWSERSLIST PAGE -->

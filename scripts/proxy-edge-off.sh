@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source "$(dirname "$0")/_helpers.sh"
+
 # Check if Edge is installed natively (AUR version)
 if command -v microsoft-edge-stable &> /dev/null
 then
@@ -39,7 +41,3 @@ then
 else
     echo "No running Edge instances found."
 fi
-
-# Start Edge
-echo "Starting Microsoft Edge..."
-$EDGE_COMMAND &

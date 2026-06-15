@@ -1,48 +1,17 @@
 #!/bin/bash
 
-# Proxy settings
-PROXY_SERVER="http=localhost:8081;https=localhost:8081;socks=localhost:1081"
+source "$(dirname "$0")/_helpers.sh"
 
-# Check if Chrome is installed natively (AUR version)
-if command -v google-chrome-stable &> /dev/null
-then
-    EDGE_COMMAND="google-chrome-stable"
-    echo "Google Chrome (AUR) found."
-
-# Check if Chrome is installed natively (.Deb version)
-elif command -v google-chrome &> /dev/null
-then
-    EDGE_COMMAND="chrome"
-    echo "Google Chrome (.Deb) found."
-
-# Check if Chrome is installed as a Flatpak
-elif flatpak list | grep -q com.google.Chrome
-then
-    EDGE_COMMAND="flatpak run com.google.Chrome"
-    echo "Google Chrome (Flatpak) found."
-
-# Check if Chrome is installed as a Snap package
-elif snap list | grep -q "chromium"
-then
-    EDGE_COMMAND="snap run chromium"
-    echo "Google Chrome (Snap) found."
-
-else
-    echo "Error: Google Chrome is not installed.">&2  # Print error to stderr
-    exit 1  # Exit with an error status
+if flatpak_app_installed com.google.Chrome; then
+    wait_for_psiphon_proxy || exit 1
+    launch_flatpak_with_proxy com.google.Chrome "${PSIPHON_HTTP_PROXY_HOST}:${PSIPHON_HTTP_PROXY_PORT}"
+    exit 0
 fi
 
-# Terminate any running instances of Google Chrome
-if pgrep -x "chrome" &> /dev/null || pgrep -f "com.google.Chrome" &> /dev/null
-then
-    echo "Terminating running Chrome instances..."
-    pkill -x "chrome" 2> /dev/null
-    pkill -x "chrome" 2> /dev/null
-    sleep 2  # Wait to ensure Chrome has closed properly
-else
-    echo "No running Chrome instances found."
+CHROME_BIN="$(resolve_google_chrome_binary)"
+if [ -z "$CHROME_BIN" ]; then
+    echo "Error: Google Chrome is not installed." >&2
+    exit 1
 fi
 
-# Start Chrome with proxy settings
-echo "Starting Google Chrome with proxy settings..."
-$EDGE_COMMAND --proxy-server="$PROXY_SERVER" &
+launch_chrome_family_with_proxy "$CHROME_BIN" "$HOME/.config/google-chrome"

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Psiphon
+GenericName=Psiphon Proxy
+Comment=Manage Psiphon tunnel and browser proxy settings
+Exec=__APP_DIR__/scripts/launch-psiphonlinuxgui.sh
+Icon=__APP_DIR__/src/assets/icons/psiphonlinuxgui.png
+Terminal=false
+Categories=Network;Utility;
+StartupNotify=true

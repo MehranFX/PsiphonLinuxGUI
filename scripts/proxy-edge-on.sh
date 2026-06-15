@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source "$(dirname "$0")/_helpers.sh"
+
 # Proxy settings
 PROXY_SERVER="http=localhost:8081;https=localhost:8081;socks=localhost:1081"
 
@@ -45,4 +47,4 @@ fi
 
 # Start Edge with proxy settings
 echo "Starting Microsoft Edge with proxy settings..."
-$EDGE_COMMAND --proxy-server="$PROXY_SERVER" &
+launch_shell_cmd "$EDGE_COMMAND --proxy-server=\"$PROXY_SERVER\""

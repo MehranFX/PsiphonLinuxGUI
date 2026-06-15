@@ -7,6 +7,7 @@
 - **Simple Connection Management:** Start and stop the Psiphon tunnel with a single button.
 - **Proxy Configuration:** Easily manage proxy settings for supported browsers.
 - **Dynamic Country Selection:** Choose from various countries to optimize your connection performance.
+- **Upstream Proxy:** Route Psiphon tunnel traffic through an HTTP, SOCKS5, or SOCKS4 proxy to reach Psiphon servers (e.g. corporate network proxy).
 
 ## Installation
 
@@ -83,6 +84,9 @@ psiphonlinuxgui
 
 ## Configuration
 Configuration files are stored in the `configs` directory. Customize the base settings in `base.config` as required. The application generates a `psiphon.config` file based on your selected region.
+
+### Upstream proxy
+Open **Settings → General** and enable **Use upstream proxy to reach Psiphon servers**. Enter your proxy host, port, type (HTTP/SOCKS5/SOCKS4), and optional credentials. When you connect, `UpstreamProxyURL` is written to `~/.config/psiphonlinuxgui/psiphon.config`. Browsers still use the local proxy at `127.0.0.1:8081` after the tunnel is up.
 
 ## License
 

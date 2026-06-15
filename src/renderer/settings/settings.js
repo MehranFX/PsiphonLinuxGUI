@@ -7,6 +7,8 @@ const {
     getConfig,
     getConfigPath,
     getGUIUpdateInfo,
+    getUpstreamProxySettings,
+    UPSTREAM_PROXY_STORAGE_KEYS,
     updateBackend,
     writeFileSafe
 } = require('../../util');
@@ -44,6 +46,60 @@ function initGeneral() {
     document.getElementById("info").checked = localStorage.getItem("info") == "true" ? true : false;
 }
 initGeneral();
+
+function setUpstreamProxyFieldsEnabled(proxyEnabled) {
+    const fields = document.getElementById('upstream-proxy-fields');
+    const inputs = [
+        'upstreamProxyType',
+        'upstreamProxyHost',
+        'upstreamProxyPort',
+        'upstreamProxyUsername',
+        'upstreamProxyPassword',
+    ];
+
+    if (fields) {
+        fields.classList.toggle('disabled', !proxyEnabled);
+    }
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !proxyEnabled;
+    });
+}
+
+function saveUpstreamProxySettings() {
+    const enabled = document.getElementById('upstreamProxyEnabled').checked;
+    localStorage.setItem(UPSTREAM_PROXY_STORAGE_KEYS.enabled, enabled);
+    localStorage.setItem(UPSTREAM_PROXY_STORAGE_KEYS.type, document.getElementById('upstreamProxyType').value);
+    localStorage.setItem(UPSTREAM_PROXY_STORAGE_KEYS.host, document.getElementById('upstreamProxyHost').value.trim());
+    localStorage.setItem(UPSTREAM_PROXY_STORAGE_KEYS.port, document.getElementById('upstreamProxyPort').value.trim());
+    localStorage.setItem(UPSTREAM_PROXY_STORAGE_KEYS.username, document.getElementById('upstreamProxyUsername').value);
+    localStorage.setItem(UPSTREAM_PROXY_STORAGE_KEYS.password, document.getElementById('upstreamProxyPassword').value);
+    setUpstreamProxyFieldsEnabled(enabled);
+}
+
+function initUpstreamProxySettings() {
+    const settings = getUpstreamProxySettings();
+
+    document.getElementById('upstreamProxyEnabled').checked = settings.enabled;
+    document.getElementById('upstreamProxyType').value = settings.type;
+    document.getElementById('upstreamProxyHost').value = settings.host;
+    document.getElementById('upstreamProxyPort').value = settings.port;
+    document.getElementById('upstreamProxyUsername').value = settings.username;
+    document.getElementById('upstreamProxyPassword').value = settings.password;
+
+    setUpstreamProxyFieldsEnabled(settings.enabled);
+}
+initUpstreamProxySettings();
+
+function addUpstreamProxyListeners() {
+    document.getElementById('upstreamProxyEnabled').addEventListener('change', saveUpstreamProxySettings);
+    ['upstreamProxyType', 'upstreamProxyHost', 'upstreamProxyPort', 'upstreamProxyUsername', 'upstreamProxyPassword']
+        .forEach(id => {
+            document.getElementById(id).addEventListener('change', saveUpstreamProxySettings);
+            document.getElementById(id).addEventListener('input', saveUpstreamProxySettings);
+        });
+}
+addUpstreamProxyListeners();
 
 // Add event listeners to each checkbox for status checking
 function addEventListener() {
@@ -270,6 +326,7 @@ modal.querySelectorAll('input').forEach(input => {
 // Disable settings if not in STOPPED state
 if (localStorage.getItem("currentStateIndex") != 0) {
     document.getElementById("hint1").style.display = 'block';
+    document.getElementById("hint-upstream").style.display = 'block';
     document.querySelector(".settings-actions").style = 'margin-top: 10px';
     document.querySelector(".setting-browser-list").style.height = "450px";
     document.querySelector(".new-btn").disabled = true;
@@ -277,6 +334,19 @@ if (localStorage.getItem("currentStateIndex") != 0) {
     document.querySelector(".save-btn").disabled = true;
     document.querySelectorAll(".remove-btn").forEach(btn => btn.disabled = true);
     document.querySelectorAll(".drag-handle").forEach(handle => handle.style.display = "none");
+    setUpstreamProxyFieldsEnabled(false);
+    const upstreamIds = [
+        'upstreamProxyEnabled',
+        'upstreamProxyType',
+        'upstreamProxyHost',
+        'upstreamProxyPort',
+        'upstreamProxyUsername',
+        'upstreamProxyPassword',
+    ];
+    upstreamIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+    });
 }
 
 // Function to set status badge

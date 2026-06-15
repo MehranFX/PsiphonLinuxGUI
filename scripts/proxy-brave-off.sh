@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source "$(dirname "$0")/_helpers.sh"
+
 # Check if Brave is installed natively
 if command -v brave &> /dev/null
 then
@@ -33,7 +35,3 @@ then
 else
     echo "No running Brave instances found."
 fi
-
-# Start Brave
-echo "Starting Brave..."
-$EDGE_COMMAND &

@@ -1,6 +1,15 @@
 // Import required modules from Electron and Node.js
 const { ipcRenderer } = require('electron');
-const { createBrowserList, createPsiphonConfig, getGUIUpdateInfo, initBackend, iconsDir, imagesDir } = require('../../util');
+const path = require('path');
+const {
+    createBrowserList,
+    createPsiphonConfig,
+    fileUrlFromPath,
+    getGUIUpdateInfo,
+    initBackend,
+    iconsDir,
+} = require('../../util');
+const { getLocale, setLocale, applyI18n, t } = require('./i18n');
 
 // Define the states the application can be in
 const states = ['STOPPED', 'STARTING', 'STARTED'];
@@ -17,6 +26,7 @@ let isProxySettingsChanging = false;
 let isProxyServerRunning = false;
 let isPortFree = true;
 let proxyStartTimeout;
+let liveLogLines = [];
 
 localStorage.setItem("currentStateIndex", currentStateIndex); // Save initial state to localStorage
 
@@ -33,10 +43,10 @@ function nextState() {
             isProxySettingsChanging = false; // Reset flag
             clearTimeout(proxyStartTimeout); // Clear any existing timeouts
             showProxyWarningText(false);
-            updateSidebarInfo("---", "---", null, "---");
+            updateIpInfo('---', '---', null, '---');
             break;
         case 1: // STARTING state
-            const country = document.getElementById('customSelect').getAttribute("data-value"); // Get selected country
+            const country = document.getElementById('customSelect').getAttribute("data-value");
             if (localStorage.getItem("country") == "true") {
                 localStorage.setItem("latestCountry", country);
             }
@@ -45,7 +55,7 @@ function nextState() {
             const isBackendInit = initBackend();
             if (createPsiphonConfig(country) && isBackendInit) {
                 isPortFree = true;
-                updateSidebarInfo("Loading...", "Loading...", null, "Loading...");
+                updateIpInfo('Loading...', null, null, null);
                 ipcRenderer.send('start-vpn-proxy-server'); // Start the VPN/proxy server
 
                 isProxySettingsChanging = true;
@@ -61,12 +71,13 @@ function nextState() {
             }
             break;
         case 2: // STARTED state
-            if (!isProxySettingsChanging) {
-                ipcRenderer.send('change-proxy-setting', changeProxySettings); // Apply new proxy settings
-                isProxySettingsChanging = true; // Set flag
+            syncChangeProxySettingsFromUI();
+            if (changeProxySettings.length > 0) {
+                ipcRenderer.send('change-proxy-setting', changeProxySettings);
+                isProxySettingsChanging = true;
             }
+            fetchIPInfo();
             if (localStorage.getItem("info") == "true") {
-                fetchIPInfo();
                 showProxyWarningText(changeProxySettings.length == 0);
             }
             if (!isProxyServerRunning) {
@@ -77,9 +88,9 @@ function nextState() {
             break;
     }
     updateStateDisplay(); // Update UI at the end
-    updateButton(); // Update button label
-    updateIcon(); // Update icon
-    hideProxyWarning(); // Hide any proxy warnings
+    updatePowerButton();
+    updateIcon();
+    hideProxyWarning();
 }
 
 // Listener for handling proxy setting errors
@@ -124,12 +135,16 @@ ipcRenderer.on('proxy-watch', (event, response) => {
         currentStateIndex = 0;
         nextState();
     }
-    document.getElementById('proxyWarning').innerHTML = res === "HTTP:DOWN" ? "The server from the selected country is currently unavailable." : "The device network is down. Please check your internet connection.";
+    document.getElementById('proxyWarning').textContent =
+        res === 'HTTP:DOWN' ? t('warning.server') : t('warning.network');
 });
 
 // Listener for handling port errors
 ipcRenderer.on('port-error', (event, err) => {
     isPortFree = false;
+    isProxyServerRunning = false;
+    clearTimeout(proxyStartTimeout);
+    currentStateIndex = -1;
     nextState();
     alert(`${err.toString()}`);
 });
@@ -153,15 +168,51 @@ function hideProxyWarning() {
 
 
 if (localStorage.getItem("country") == "true") {
-    document.querySelectorAll('#customOptions div').forEach((option) => {
-        var value = option.getAttribute('data-value');
-        var icon = option.querySelector('i, .fi').className;
-        var text = option.textContent.trim();
-        if (localStorage.getItem("latestCountry") == value) {
-            document.getElementById('customSelect').innerHTML = '<span class="' + icon + '"></span> ' + text + ' <button id="toggleButton"><i class="fa-solid fa-caret-down"></i></button>';
-            document.getElementById('customSelect').setAttribute('data-value', value);
-        }
-    });
+    // restored after i18n in restoreCountrySelection()
+}
+
+function getCountryOption(value) {
+    return document.querySelector(`#customOptions div[data-value="${value}"]`);
+}
+
+function getLocationIconMarkup(value, optionEl) {
+    if (!value) {
+        return '<i class="fa-solid fa-rocket fastest-icon"></i>';
+    }
+    const flag = optionEl ? optionEl.querySelector('.fi') : null;
+    if (flag) {
+        return `<span class="${flag.className}"></span>`;
+    }
+    return '<i class="fa-solid fa-rocket fastest-icon"></i>';
+}
+
+function getLocationLabel(value, optionEl) {
+    if (!value) {
+        return t('location.fastest');
+    }
+    const label = optionEl ? optionEl.querySelector('.option-label') : null;
+    return label ? label.textContent.trim() : value;
+}
+
+function setLocationDisplay(value) {
+    const customSelect = document.getElementById('customSelect');
+    const optionEl = getCountryOption(value);
+    customSelect.setAttribute('data-value', value);
+    document.getElementById('locationFlag').innerHTML = getLocationIconMarkup(value, optionEl);
+    document.getElementById('locationName').textContent = getLocationLabel(value, optionEl);
+}
+
+function restoreCountrySelection() {
+    if (localStorage.getItem("country") != "true") {
+        setLocationDisplay('');
+        return;
+    }
+    const saved = localStorage.getItem("latestCountry");
+    if (saved !== null && getCountryOption(saved)) {
+        setLocationDisplay(saved);
+    } else {
+        setLocationDisplay('');
+    }
 }
 
 // Function to change the country setting and reset the state if needed
@@ -174,38 +225,58 @@ function changeCountry() {
     }
 }
 
-// Function to update the display of the current state in the UI
+// Function to update connection status UI
 function updateStateDisplay() {
-    const currentStateElement = document.getElementById('currentState');
-    currentStateElement.textContent = states[currentStateIndex]; // Display current state text
-    currentStateElement.style.color = (states[currentStateIndex] == "STARTED" ? "#229b40" : (states[currentStateIndex] == "STARTING" ? "#e9a442" : "#902232"));
+    const state = states[currentStateIndex];
+    document.getElementById('currentState').textContent = state;
 
-    const currentStateIconElement = document.getElementById('currentStateIcon');
-    const currentStateIcon = `${imagesDir}/` + states[currentStateIndex] + (states[currentStateIndex] == "STARTING" ? ".gif" : ".png");
-    currentStateIconElement.setAttribute("src", currentStateIcon); // Set corresponding icon
+    const statusLabel = document.getElementById('statusLabel');
+    const statusHint = document.getElementById('statusHint');
+    const stateClass = state === 'STARTED' ? 'state-started' : (state === 'STARTING' ? 'state-starting' : 'state-stopped');
+
+    statusLabel.className = `status-label ${stateClass}`;
+    statusLabel.textContent = state === 'STARTED' ? t('status.started') : (state === 'STARTING' ? t('status.starting') : t('status.stopped'));
+
+    statusHint.textContent = state === 'STARTED' ? t('connect.hint.started') : (state === 'STARTING' ? t('connect.hint.starting') : t('connect.hint'));
+
+    updateConnectIpVisibility();
 }
 
-// Function to update the button text based on current state
-function updateButton() {
-    const currentStateElement = document.getElementById('Button');
-    if (currentStateIndex == 0) {
-        currentStateElement.textContent = "CONNECT"; // Set button text for STOPPED state
-        document.getElementById('nextStateButton').style.backgroundColor = "#229b40";
-    } else if (currentStateIndex == 1) {
-        currentStateElement.textContent = "STOP"; // Set button text for STARTING state
-        document.getElementById('nextStateButton').style.backgroundColor = "#902232";
-    } else if (currentStateIndex == 2) {
-        currentStateElement.textContent = "DISCONNECT"; // Set button text for STARTED state
-        document.getElementById('nextStateButton').style.backgroundColor = "#902232";
+function updateConnectIpVisibility() {
+    const wrap = document.getElementById('connectIpDisplay');
+    if (!wrap) return;
+
+    if (currentStateIndex === 1 || currentStateIndex === 2) {
+        wrap.hidden = false;
+    } else {
+        wrap.hidden = true;
     }
+}
+
+function updatePowerButton() {
+    const btn = document.getElementById('nextStateButton');
+    const state = states[currentStateIndex];
+    const glow = document.getElementById('powerGlow');
+    const ring = document.getElementById('powerRing');
+    const radiate = document.getElementById('powerRadiate');
+
+    btn.className = 'power-btn ' + (state === 'STARTED' ? 'state-started' : (state === 'STARTING' ? 'state-starting' : 'state-stopped'));
+    glow.className = 'power-glow ' + (state === 'STARTED' ? 'state-started' : (state === 'STARTING' ? 'state-starting' : ''));
+    ring.classList.toggle('pulse', false);
+    if (radiate) {
+        radiate.classList.toggle('active', state === 'STARTING');
+    }
+
+    document.getElementById('Button').textContent =
+        state === 'STARTED' ? t('btn.disconnect') : (state === 'STARTING' ? t('btn.stop') : t('btn.connect'));
 }
 
 // Function to update the icon
 function updateIcon() {
     if (currentStateIndex != 2) {
-        document.getElementById('icon').setAttribute("src", `${iconsDir}/psiphonlinuxgui-off.png`);
+        document.getElementById('icon').setAttribute("src", fileUrlFromPath(path.join(iconsDir, 'psiphonlinuxgui-off.png')));
     } else if (currentStateIndex == 2) {
-        document.getElementById('icon').setAttribute("src", `${iconsDir}/psiphonlinuxgui.png`);
+        document.getElementById('icon').setAttribute("src", fileUrlFromPath(path.join(iconsDir, 'psiphonlinuxgui.png')));
     }
 }
 
@@ -217,15 +288,45 @@ function openSettingsPage() {
 // Event listener for the button to switch states
 document.getElementById('nextStateButton').addEventListener('click', nextState);
 
-// Event listener for changing country options
-document.getElementById('customOptions').addEventListener('click', changeCountry);
-
 // Event listener for the button to open the setting page
 document.getElementById('settingsBtn').addEventListener('click', openSettingsPage);
 
+let windowHeightFitFrame = 0;
+
+function scheduleWindowHeightFit() {
+    cancelAnimationFrame(windowHeightFitFrame);
+    windowHeightFitFrame = requestAnimationFrame(() => {
+        const app = document.querySelector('.app');
+        if (!app) {
+            return;
+        }
+        const height = Math.ceil(app.getBoundingClientRect().height);
+        ipcRenderer.send('fit-window-height', height);
+    });
+}
+
+function initWindowHeightFit() {
+    const app = document.querySelector('.app');
+    if (!app) {
+        return;
+    }
+
+    const observer = new ResizeObserver(scheduleWindowHeightFit);
+    observer.observe(app);
+    scheduleWindowHeightFit();
+}
+
 // Initial UI update
+initPanels();
+initLocale();
+initLiveLog();
+initSystemProxyToggle();
+restoreCountrySelection();
+initCountrySelect();
+initBanner();
+initWindowHeightFit();
 updateStateDisplay();
-updateButton();
+updatePowerButton();
 updateIcon();
 
 // Function to get the status of a checkbox by its ID
@@ -233,16 +334,23 @@ function getCheckboxStatus(id) {
     return document.getElementById(id).checked; // Return the checked state of the checkbox
 }
 
+// Function to sync enabled browsers from UI toggles
+function syncChangeProxySettingsFromUI() {
+    changeProxySettings = checkboxes
+        .filter((checkbox) => getCheckboxStatus(checkbox.id))
+        .map((checkbox) => checkbox.name);
+}
+
 // Function to update the proxy settings array based on checkbox changes
 function updateProxySettings(name, checked) {
     const proxySetting = `${name}`;
 
-    if (checked) {
-        changeProxySettings.push(proxySetting); // Add the setting if checked
+    if (checked && !changeProxySettings.includes(proxySetting)) {
+        changeProxySettings.push(proxySetting);
     }
 
     if (isProxySettingsChanging) {
-        isProxySettingsChanging = false; // Reset the flag if changing settings
+        isProxySettingsChanging = false;
     }
 }
 
@@ -261,15 +369,17 @@ function checkCheckboxStatus() {
             if (currentStateIndex == 2) ipcRenderer.send('restore-setting', [checkbox.name]); // Restore settings if in STARTED state
             checkbox.checked = newChecked;
         } else if (newChecked !== checkbox.checked) {
-            // Update the checked state and settings
             checkbox.checked = newChecked;
             updateProxySettings(checkbox.name, newChecked);
+            if (currentStateIndex === 2 && newChecked) {
+                syncChangeProxySettingsFromUI();
+                ipcRenderer.send('change-proxy-setting', changeProxySettings);
+            }
         }
     });
 
-    if (currentStateIndex === 2) {
-        currentStateIndex = 1; // Switch state if needed
-        nextState();
+    if (currentStateIndex === 2 && localStorage.getItem("info") == "true") {
+        showProxyWarningText(changeProxySettings.length === 0);
     }
 }
 
@@ -310,42 +420,283 @@ ipcRenderer.on('refresh-info-text', () => {
 
 // Function to change info text
 function changeInfoText() {
+    const ipInfo = document.getElementById('ip-info');
+    if (!ipInfo) return;
+
     if (localStorage.getItem("info") == "true") {
-        document.getElementById('ip-info').style = "display:block";
-        document.getElementById('info-text').style = "display:none";
+        ipInfo.style.display = 'block';
         if (currentStateIndex == 2) {
             fetchIPInfo();
             showProxyWarningText(changeProxySettings.length == 0);
         }
     } else {
-        document.getElementById('ip-info').style = "display:none";
-        document.getElementById('info-text').style = "display:block";
+        ipInfo.style.display = 'none';
         showProxyWarningText(false);
     }
 }
 changeInfoText();
 
-// Create the browserToggles HTML containers for the browserList
+function scrollLiveLogToBottom() {
+    const container = document.getElementById('liveLogContainer');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function renderLiveLog() {
+    const el = document.getElementById('liveLog');
+    if (!el) return;
+
+    if (liveLogLines.length === 0) {
+        el.textContent = t('log.empty');
+        return;
+    }
+
+    el.textContent = liveLogLines.join('\n');
+    scrollLiveLogToBottom();
+    if (document.getElementById('connectionPanel')?.classList.contains('log-open')) {
+        updateConnectionLogOverlayLayout();
+    }
+}
+
+function appendLiveLogLine(line) {
+    liveLogLines.push(line);
+    if (liveLogLines.length > 400) {
+        liveLogLines.shift();
+    }
+    renderLiveLog();
+}
+
+function requestLogBuffer() {
+    ipcRenderer.send('get-log-buffer');
+}
+
+function initLiveLog() {
+    ipcRenderer.on('app-log', (_event, line) => {
+        appendLiveLogLine(line);
+    });
+
+    ipcRenderer.on('log-buffer', (_event, lines) => {
+        liveLogLines = Array.isArray(lines) ? [...lines] : [];
+        renderLiveLog();
+    });
+
+    renderLiveLog();
+}
+
+function initSystemProxyToggle() {
+    const toggle = document.getElementById('systemProxyToggle');
+    if (!toggle) return;
+
+    const saved = localStorage.getItem('systemProxy') === 'true';
+    toggle.checked = saved;
+
+    if (saved) {
+        ipcRenderer.invoke('set-system-proxy', true).then((result) => {
+            if (!result.ok) {
+                toggle.checked = false;
+                localStorage.setItem('systemProxy', 'false');
+            }
+        });
+    }
+
+    toggle.addEventListener('change', async () => {
+        const enabled = toggle.checked;
+        const result = await ipcRenderer.invoke('set-system-proxy', enabled);
+        if (!result.ok) {
+            toggle.checked = !enabled;
+            alert(result.error || t('system.proxy.error'));
+            return;
+        }
+        localStorage.setItem('systemProxy', enabled ? 'true' : 'false');
+    });
+}
+
+// Create browser toggle rows for installed browsers only
 function createBrowserListItem(browserConfig) {
     return browserConfig.map((browser, id) => {
-        let iconHTML =
-            browser.icon.localPath ?
-                `<span><img class="localPath" src="${browser.icon.localPath}" alt="${browser.name}"></span>` :
-                `<span class="${browser.icon.css}"></span>`;
+        let iconHTML;
+        if (browser.icon.localPath) {
+            const iconPath = path.join(__dirname, '../../assets/browserIcons', path.basename(browser.icon.localPath));
+            iconHTML = `<img class="browser-icon-img" src="${fileUrlFromPath(iconPath)}" alt="${browser.name}">`;
+        } else {
+            iconHTML = `<i class="${browser.icon.css} browser-fa-icon"></i>`;
+        }
 
         id += 1;
         checkboxes.push({ id: `${id}`, name: browser.name, checked: false });
 
         return `
-            <div class="toggle-container">
-              ${iconHTML}
-              <div class="toggle-text">${browser.name}:</div>
-              <label class="switch">
+            <div class="browser-item">
+              <div class="browser-info">${iconHTML}<span>${browser.name}</span></div>
+              <label class="toggle">
                 <input type="checkbox" id="${id}">
-                <span class="slider"></span>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>`;
     }).join('');
+}
+
+function updateConnectionLogOverlayLayout() {
+    const panel = document.getElementById('connectionPanel');
+    const body = document.getElementById('connectionPanelBody');
+    const toggle = document.getElementById('connectionPanelToggle');
+    const content = document.querySelector('.content');
+    const backdrop = document.getElementById('logOverlayBackdrop');
+
+    if (!panel || !body || !toggle || !content) {
+        return;
+    }
+
+    if (!panel.classList.contains('log-open')) {
+        body.style.top = '';
+        body.style.bottom = '';
+        if (backdrop) {
+            backdrop.classList.remove('visible');
+            backdrop.classList.add('hidden');
+            backdrop.setAttribute('aria-hidden', 'true');
+        }
+        return;
+    }
+
+    const toggleRect = toggle.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const gap = 8;
+
+    body.style.top = `${toggleRect.bottom + gap}px`;
+    body.style.bottom = `${window.innerHeight - contentRect.bottom + gap}px`;
+
+    if (backdrop) {
+        backdrop.classList.remove('hidden');
+        backdrop.setAttribute('aria-hidden', 'false');
+        requestAnimationFrame(() => backdrop.classList.add('visible'));
+    }
+}
+
+function setConnectionLogOpen(open) {
+    const panel = document.getElementById('connectionPanel');
+    const btn = document.getElementById('connectionPanelToggle');
+    const panelBody = document.getElementById('connectionPanelBody');
+    if (!btn || !panelBody || !panel) {
+        return;
+    }
+
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panelBody.classList.toggle('collapsed', !open);
+    panel.classList.toggle('log-open', open);
+    updateConnectionLogOverlayLayout();
+
+    if (open) {
+        requestLogBuffer();
+        scrollLiveLogToBottom();
+    }
+}
+
+function initPanels() {
+    const browserPanel = {
+        toggle: 'browserPanelToggle',
+        body: 'browserPanelBody',
+        defaultOpen: false,
+    };
+
+    const connectionBtn = document.getElementById('connectionPanelToggle');
+    const connectionBody = document.getElementById('connectionPanelBody');
+    const backdrop = document.getElementById('logOverlayBackdrop');
+
+    if (connectionBtn && connectionBody) {
+        connectionBtn.setAttribute('aria-expanded', 'false');
+        connectionBody.classList.add('collapsed');
+
+        connectionBtn.addEventListener('click', () => {
+            const open = connectionBtn.getAttribute('aria-expanded') !== 'true';
+            setConnectionLogOpen(open);
+        });
+
+        backdrop?.addEventListener('click', () => setConnectionLogOpen(false));
+        window.addEventListener('resize', updateConnectionLogOverlayLayout);
+    }
+
+    const btn = document.getElementById(browserPanel.toggle);
+    const panelBody = document.getElementById(browserPanel.body);
+    if (btn && panelBody) {
+        btn.setAttribute('aria-expanded', browserPanel.defaultOpen ? 'true' : 'false');
+        panelBody.classList.toggle('collapsed', !browserPanel.defaultOpen);
+
+        btn.addEventListener('click', () => {
+            const open = btn.getAttribute('aria-expanded') !== 'true';
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            panelBody.classList.toggle('collapsed', !open);
+        });
+    }
+}
+
+function initLocale() {
+    const langSelect = document.getElementById('langSelect');
+    if (langSelect) {
+        langSelect.value = getLocale();
+        langSelect.addEventListener('change', () => {
+            setLocale(langSelect.value);
+            restoreCountrySelection();
+            updateStateDisplay();
+            updatePowerButton();
+            if (typeof renderLiveLog === 'function' && liveLogLines.length === 0) {
+                renderLiveLog();
+            }
+        });
+    }
+    applyI18n();
+}
+
+function initCountrySelect() {
+    const wrapper = document.getElementById('countrySelectWrapper');
+    const customSelect = document.getElementById('customSelect');
+
+    customSelect.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+    });
+
+    document.getElementById('toggleButton').addEventListener('click', (e) => {
+        e.stopPropagation();
+        wrapper.classList.toggle('open');
+    });
+
+    document.querySelectorAll('#customOptions div').forEach((option) => {
+        option.addEventListener('click', function () {
+            const value = this.getAttribute('data-value');
+            setLocationDisplay(value);
+            wrapper.classList.remove('open');
+            changeCountry();
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.custom-select-wrapper')) {
+            wrapper.classList.remove('open');
+        }
+    });
+}
+
+function initBanner() {
+    const notifyBtn = document.getElementById('notifyBtn');
+    const banner = document.getElementById('updateBanner');
+    const closeBtn = document.getElementById('closeBanner');
+
+    notifyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        banner.classList.toggle('show');
+    });
+
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        banner.classList.remove('show');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!banner.contains(e.target) && !notifyBtn.contains(e.target)) {
+            banner.classList.remove('show');
+        }
+    });
 }
 
 // Initial call to add EventListener
@@ -380,7 +731,7 @@ async function checkForUpdate() {
 
 // Listener for handling ip info
 ipcRenderer.on('ip-info-result', (event, { ip, country, countryCode, city }) => {
-    updateSidebarInfo(ip, country, countryCode, city);
+    updateIpInfo(ip, country, countryCode, city);
 });
 
 // Function to get IP info
@@ -388,11 +739,13 @@ function fetchIPInfo() {
     ipcRenderer.send('fetch-ip-info');
 }
 
-// Set IP & Country in the sidebar
-function updateSidebarInfo(ip, country, countryCode, city) {
-    document.getElementById('current-ip').textContent = ip || '---';
-    document.getElementById('current-country').textContent = country || '---';
-    document.getElementById('current-city').textContent = city || '---';
+function updateIpInfo(ip, country, countryCode, city) {
+    document.getElementById('current-ip').textContent = ip || '—';
+    document.getElementById('current-country').textContent = country || '—';
+    document.getElementById('current-city').textContent = city || '—';
+
+    const ipEl = document.getElementById('current-ip');
+    ipEl.classList.toggle('connected', ip && ip !== '—' && ip !== 'Loading...' && ip !== '---');
 
     const flagIcon = document.getElementById('flag-icon');
 
@@ -402,6 +755,45 @@ function updateSidebarInfo(ip, country, countryCode, city) {
     } else {
         flagIcon.className = '';
         flagIcon.style.display = 'none';
+    }
+
+    updateConnectIpDisplay(ip, countryCode);
+}
+
+function updateConnectIpDisplay(ip, countryCode) {
+    const valueEl = document.getElementById('connectIpValue');
+    const flagEl = document.getElementById('connectIpFlag');
+    if (!valueEl) return;
+
+    updateConnectIpVisibility();
+
+    if (currentStateIndex === 0) {
+        return;
+    }
+
+    valueEl.classList.remove('connected', 'loading');
+
+    if (currentStateIndex === 1 || ip === 'Loading...') {
+        valueEl.textContent = t('ip.loading');
+        valueEl.classList.add('loading');
+        if (flagEl) flagEl.style.display = 'none';
+        return;
+    }
+
+    if (!ip || ip === '---') {
+        valueEl.textContent = '—';
+        if (flagEl) flagEl.style.display = 'none';
+        return;
+    }
+
+    valueEl.textContent = ip;
+    valueEl.classList.add('connected');
+
+    if (flagEl && countryCode) {
+        flagEl.className = `fi fi-${countryCode.toLowerCase()} connect-ip-flag`;
+        flagEl.style.display = 'inline-block';
+    } else if (flagEl) {
+        flagEl.style.display = 'none';
     }
 }
 

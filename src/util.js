@@ -1,8 +1,32 @@
-const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
 const os = require('os');
+const { pathToFileURL } = require('url');
+const { filterInstalledBrowsers } = require('./browserDetect');
+
+function getIpcRenderer() {
+    try {
+        if (typeof process !== 'undefined' && process.type === 'renderer') {
+            return require('electron').ipcRenderer;
+        }
+    } catch (_) { /* main process */ }
+    return null;
+}
+
+function notifyUser(message) {
+    try {
+        if (typeof process !== 'undefined' && process.type === 'renderer' && typeof alert === 'function') {
+            alert(message);
+            return;
+        }
+    } catch (_) { /* ignore */ }
+    console.error(message);
+}
+
+function fileUrlFromPath(filePath) {
+    return pathToFileURL(filePath).href;
+}
 
 const scriptPath = path.join(__dirname, '../scripts');
 
@@ -59,7 +83,7 @@ function writeFileSafe(file, data) {
     try {
         writeFile(file, data);
     } catch (e) {
-        alert(
+        notifyUser(
             'Failed to write file.\n\n' +
             'The file could not be saved.\n\n' +
             `Details: ${e.message || e}`
@@ -84,7 +108,7 @@ function getConfigPath(configFile) {
 
         return userConfigFilePath;
     } catch (e) {
-        alert(
+        notifyUser(
             'Failed to load the configuration file.\n\n' +
             'Either no default configuration was defined for this config file, ' +
             'or the default configuration file could not be found.\n\n' +
@@ -110,7 +134,7 @@ function getConfig(configFile) {
         const userConfigFilePath = getConfigPath(configFile);
         return userConfigFilePath ? JSON.parse(readFile(userConfigFilePath)) : false;
     } catch (e) {
-        alert(
+        notifyUser(
             'Failed to read JSON file.\n\n' +
             `Details: ${e.message || e}`
         );
@@ -124,7 +148,7 @@ function getDefaultBrowserConfig() {
         const defaultConfigPath = getDefaultFile('browser.config');
         return JSON.parse(readFile(defaultConfigPath));
     } catch (e) {
-        alert(
+        notifyUser(
             'Failed to load the configuration file.\n\n' +
             'Either no default configuration was defined for this config file, ' +
             'or the default configuration file could not be found.\n\n' +
@@ -135,10 +159,122 @@ function getDefaultBrowserConfig() {
     }
 }
 
-// Create the browser list
+// Merge user browser list with newly added defaults
+function getMergedBrowserConfig() {
+    const userConfig = getConfig('browser.config') || [];
+    const defaultConfig = getDefaultBrowserConfig() || [];
+    if (!Array.isArray(userConfig) || !Array.isArray(defaultConfig)) {
+        return userConfig || defaultConfig || [];
+    }
+    const known = new Set(userConfig.map((b) => b.name));
+    const merged = [...userConfig];
+    defaultConfig.forEach((browser) => {
+        if (!known.has(browser.name)) {
+            merged.push(browser);
+        }
+    });
+    return merged;
+}
+
+function persistMergedBrowserConfig() {
+    const userConfig = getConfig('browser.config') || [];
+    const merged = getMergedBrowserConfig();
+    if (!Array.isArray(userConfig) || merged.length <= userConfig.length) {
+        return;
+    }
+    const userConfigFilePath = getConfigPath('browser.config');
+    if (userConfigFilePath) {
+        writeFile(userConfigFilePath, JSON.stringify(merged, null, 2));
+    }
+}
+
+// Create the browser list (only browsers installed on this system)
 function createBrowserList(browserList, createBrowserListItem) {
-    const browserConfig = getConfig('browser.config');
-    browserList.innerHTML = createBrowserListItem(browserConfig ? browserConfig : []);
+    persistMergedBrowserConfig();
+    const browserConfig = getMergedBrowserConfig();
+    const installed = filterInstalledBrowsers(browserConfig);
+    browserList.innerHTML = createBrowserListItem(installed);
+
+    const emptyEl = document.getElementById('browserEmpty');
+    const countEl = document.getElementById('browserCount');
+    if (emptyEl) {
+        emptyEl.classList.toggle('hidden', installed.length > 0);
+    }
+    if (countEl) {
+        countEl.textContent = installed.length > 0 ? String(installed.length) : '';
+        countEl.classList.toggle('hidden', installed.length === 0);
+    }
+}
+
+const UPSTREAM_PROXY_STORAGE_KEYS = {
+    enabled: 'upstreamProxyEnabled',
+    type: 'upstreamProxyType',
+    host: 'upstreamProxyHost',
+    port: 'upstreamProxyPort',
+    username: 'upstreamProxyUsername',
+    password: 'upstreamProxyPassword',
+};
+
+function getUpstreamProxySettings() {
+    const storage = typeof localStorage !== 'undefined' ? localStorage : null;
+    if (!storage) {
+        return { enabled: false, type: 'http', host: '', port: '', username: '', password: '' };
+    }
+    return {
+        enabled: storage.getItem(UPSTREAM_PROXY_STORAGE_KEYS.enabled) === 'true',
+        type: storage.getItem(UPSTREAM_PROXY_STORAGE_KEYS.type) || 'http',
+        host: storage.getItem(UPSTREAM_PROXY_STORAGE_KEYS.host) || '',
+        port: storage.getItem(UPSTREAM_PROXY_STORAGE_KEYS.port) || '',
+        username: storage.getItem(UPSTREAM_PROXY_STORAGE_KEYS.username) || '',
+        password: storage.getItem(UPSTREAM_PROXY_STORAGE_KEYS.password) || '',
+    };
+}
+
+function buildUpstreamProxyURL(settings) {
+    if (!settings || !settings.enabled) {
+        return '';
+    }
+
+    const host = (settings.host || '').trim();
+    const port = String(settings.port || '').trim();
+    if (!host || !port) {
+        return '';
+    }
+
+    const type = settings.type || 'http';
+    const scheme = type === 'socks5' ? 'socks5' : (type === 'socks4a' ? 'socks4a' : 'http');
+
+    const username = (settings.username || '').trim();
+    const password = settings.password || '';
+
+    let credentials = '';
+    if (username) {
+        credentials = `${encodeURIComponent(username)}:${encodeURIComponent(password)}@`;
+    }
+
+    return `${scheme}://${credentials}${host}:${port}`;
+}
+
+function validateUpstreamProxySettings(settings) {
+    if (!settings || !settings.enabled) {
+        return { valid: true };
+    }
+    const host = (settings.host || '').trim();
+    const port = String(settings.port || '').trim();
+    if (!host || !port) {
+        return {
+            valid: false,
+            message: 'Upstream proxy is enabled. Please enter host and port in Settings → General.',
+        };
+    }
+    const portNum = Number(port);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+        return {
+            valid: false,
+            message: 'Upstream proxy port must be a number between 1 and 65535.',
+        };
+    }
+    return { valid: true };
 }
 
 // Create the psiphon config
@@ -147,7 +283,21 @@ function createPsiphonConfig(country) {
         const psiphonConfig = getConfig('psiphon.config');
 
         if (psiphonConfig) {
+            const upstreamSettings = getUpstreamProxySettings();
+            const upstreamValidation = validateUpstreamProxySettings(upstreamSettings);
+            if (!upstreamValidation.valid) {
+                notifyUser(upstreamValidation.message);
+                return false;
+            }
+
             psiphonConfig.EgressRegion = country;
+
+            const upstreamUrl = buildUpstreamProxyURL(upstreamSettings);
+            if (upstreamUrl) {
+                psiphonConfig.UpstreamProxyURL = upstreamUrl;
+            } else {
+                delete psiphonConfig.UpstreamProxyURL;
+            }
 
             const newPsiphonConfig = JSON.stringify(psiphonConfig, null, 2);
 
@@ -158,7 +308,7 @@ function createPsiphonConfig(country) {
         }
     } catch (e) {
         // Display an alert in case of an error
-        alert('Failed to save the file! Error: ' + e.message);
+        notifyUser('Failed to save the file! Error: ' + e.message);
         return false;
     }
 }
@@ -166,15 +316,18 @@ function createPsiphonConfig(country) {
 // Function to get start and stop script for changing browser settings
 function getScript(name, scriptType) {
     try {
-        const browserConfig = getConfig('browser.config')
+        const browserConfig = getMergedBrowserConfig();
         const browser = browserConfig.find(b => b.name === name);
+        if (!browser) {
+            throw new Error(`Browser "${name}" is not configured.`);
+        }
         if (browser.scriptLocation == "interScript") {
             return `${scriptPath}/${browser[scriptType]}`;
-        } else {
-            return browser[scriptType];
         }
+        return browser[scriptType];
     } catch (e) {
-        alert("An error occurred while loading the browser configuration. " + e.message);
+        notifyUser("An error occurred while loading the browser configuration. " + e.message);
+        return null;
     }
 }
 
@@ -202,7 +355,7 @@ function initBackend() {
         }
         return true;
     } catch (e) {
-        alert(
+        notifyUser(
             'Failed to load the configuration file.\n\n' +
             'Either no default configuration was defined for this config file, ' +
             'or the default configuration file could not be found.\n\n' +
@@ -215,7 +368,9 @@ function initBackend() {
 
 // Function to get the App version
 async function getAppVersion() {
-    return await ipcRenderer.invoke("get-version");
+    const ipc = getIpcRenderer();
+    if (!ipc) return '0.0.0';
+    return await ipc.invoke("get-version");
 }
 
 // Function to get GUI update info
@@ -345,10 +500,15 @@ async function updateBackend(onProgress) {
 }
 
 module.exports = {
+    buildUpstreamProxyURL,
     checkBackendUpdate,
     createBrowserList,
     createPsiphonConfig,
+    fileUrlFromPath,
+    getUpstreamProxySettings,
+    validateUpstreamProxySettings,
     getAppVersion,
+    UPSTREAM_PROXY_STORAGE_KEYS,
     getConfig,
     getConfigPath,
     getDefaultBrowserConfig,

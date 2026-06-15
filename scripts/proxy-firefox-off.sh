@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# Function for writing the user.js file
+source "$(dirname "$0")/_helpers.sh"
+
+# Function for writing the user.js file (proxy disabled)
 write_standard_user_js() {
     local user_js_file=$1
     cat <<EOL > "$user_js_file"
@@ -16,13 +18,6 @@ user_pref("network.proxy.socks_port", 0);
 user_pref("network.proxy.socks_version", 0);
 user_pref("network.proxy.no_proxies_on", "localhost, 127.0.0.1");
 EOL
-
-# Restart Firefox if it is running
-if pgrep -x "firefox" || pgrep -x "firefox-bin"; then
-    pkill firefox && firefox
-else
-    firefox
-fi
 }
 
 # Find standard installation
@@ -72,3 +67,8 @@ for FLATPAK_PROFILE_DIR in $FLATPAK_PROFILE_DIRS; do
         echo "No user.js file found in$FLATPAK_PROFILE_DIR"
     fi
 done
+
+if pgrep -x firefox >/dev/null || pgrep -x firefox-bin >/dev/null; then
+    pkill firefox 2>/dev/null || true
+    pkill firefox-bin 2>/dev/null || true
+fi

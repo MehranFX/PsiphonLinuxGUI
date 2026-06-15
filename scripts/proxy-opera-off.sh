@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source "$(dirname "$0")/_helpers.sh"
+
 # Check if Opera is installed natively (AUR version)
 if command -v opera &> /dev/null
 then
@@ -39,7 +41,3 @@ then
 else
     echo "No running Opera instances found."
 fi
-
-# Start Opera
-echo "Starting Opera..."
-$EDGE_COMMAND &
