@@ -1,318 +1,375 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="settings.css" />
-    <title>Setting</title>
+    <title>Settings · Psiphon</title>
 </head>
-
 <body>
-    <div class="settings-wrapper">
-
-        <!-- SIDEBAR -->
-        <div class="setting-sidebar">
-            <div class="setting-sidebar-item active" data-page="general">
-                General
+    <div class="settings-app">
+        <header class="settings-header">
+            <div class="settings-header-brand">
+                <i class="fa-solid fa-gear settings-header-icon" aria-hidden="true"></i>
+                <div>
+                    <h1 class="settings-header-title">Settings</h1>
+                    <p class="settings-header-sub">PsiphonLinuxGUI</p>
+                </div>
             </div>
-            <div class="setting-sidebar-item" data-page="browser-list">
-                Edit Browser list
-            </div>
-            <div class="setting-sidebar-item" data-page="about-page">
-                About Page
-            </div>
-        </div>
+        </header>
 
-        <!-- CONTENT -->
-        <div class="content">
+        <nav class="settings-nav" aria-label="Settings sections">
+            <button type="button" class="settings-nav-item active" data-page="general">
+                <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+                <span>General</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-page="browser-list">
+                <i class="fa-solid fa-globe" aria-hidden="true"></i>
+                <span>Browsers</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-page="about-page">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                <span>About</span>
+            </button>
+        </nav>
 
-            <!-- GENERAL PAGE -->
-            <div class="page active" id="general">
+        <main class="settings-main">
+            <!-- GENERAL -->
+            <div class="settings-page active" id="general">
+                <section class="settings-card">
+                    <h2 class="settings-card-title">Preferences</h2>
 
-                <div class="toggle-container">
-                    <div class="toggle-text">Remember the last used browser script:</div>
-                    <label class="switch">
-                        <input type="checkbox" id="browserScrips">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="toggle-container">
-                    <div class="toggle-text">Remember the last used country:</div>
-                    <label class="switch">
-                        <input type="checkbox" id="country">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="toggle-container">
-                    <div class="toggle-text">Show IP, country & city of connected Proxy Server:</div>
-                    <label class="switch">
-                        <input type="checkbox" id="info">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="toggle-container">
-                    <div class="toggle-text">Theme:</div>
-
-                    <select class="fa" id="themeSelector">
-                        <option class="fa fa-adjust">&#xf042; &nbsp; Auto</option>
-                        <option class="fa fa-sun">&#xf185; &nbsp; Light</option>
-                        <option class="fa fa-moon">&#xf186; &nbsp; Dark</option>
-                    </select>
-                </div>
-
-                <div class="upstream-proxy-section">
-                    <div class="hint-box" id="hint-upstream">
-                        To change upstream proxy settings, please turn off the proxy server.
-                    </div>
-
-                    <div class="toggle-container upstream-toggle">
-                        <div class="toggle-text">Use upstream proxy to reach Psiphon servers:</div>
-                        <label class="switch">
-                            <input type="checkbox" id="upstreamProxyEnabled">
-                            <span class="slider"></span>
+                    <div class="settings-row">
+                        <span class="settings-row-label">Remember the last used browser script</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="browserScrips">
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
                         </label>
                     </div>
 
-                    <p class="upstream-proxy-desc">
+                    <div class="settings-row">
+                        <span class="settings-row-label">Remember the last used country</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="country">
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row">
+                        <span class="settings-row-label">Show IP, country &amp; city of connected proxy</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="info">
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-row settings-row-select">
+                        <span class="settings-row-label">Theme</span>
+                        <select class="settings-select" id="themeSelector">
+                            <option value="auto">Auto</option>
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                        </select>
+                    </div>
+                </section>
+
+                <section class="settings-card transport-section">
+                    <h2 class="settings-card-title">Transport mode</h2>
+
+                    <div class="hint-box" id="hint-transport">
+                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                        <span>Disconnect the tunnel before changing transport settings.</span>
+                    </div>
+
+                    <div class="settings-field">
+                        <label for="transportProtocol">Mode</label>
+                        <select class="settings-select" id="transportProtocol">
+                            <option value="auto">Auto (all protocols)</option>
+                            <option value="direct">Direct</option>
+                            <option value="cdnFronting">CDN fronting</option>
+                            <option value="conduit">Conduit (in-proxy)</option>
+                        </select>
+                    </div>
+
+                    <p class="settings-desc" id="transportModeDesc">
+                        Auto tries all tunnel protocols. CDN fronting uses Meek-only tunnels, ignores country selection, and may take up to 3 minutes.
+                    </p>
+
+                    <p class="settings-callout" id="transportBackendHint" hidden></p>
+                    <p class="settings-warning" id="conduitBlockedWarning" hidden></p>
+
+                    <div id="cdn-fronting-fields" class="settings-subsection" hidden>
+                        <div class="settings-row">
+                            <span class="settings-row-label">Use built-in CDN scan spec</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="cdnFrontingUseBuiltInScan" checked>
+                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                            </label>
+                        </div>
+                        <div class="settings-field">
+                            <label for="cdnFrontingCustomIpList">Custom edge IPs (optional)</label>
+                            <textarea class="settings-textarea" id="cdnFrontingCustomIpList" rows="2" placeholder="23.215.0.206, 23.12.147.13"></textarea>
+                        </div>
+                        <div class="settings-field">
+                            <label for="cdnFrontingCustomSni">Custom SNI hostnames (optional)</label>
+                            <textarea class="settings-textarea" id="cdnFrontingCustomSni" rows="2" placeholder="example.com"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="conduit-fields" class="settings-subsection" hidden>
+                        <div class="settings-field">
+                            <label for="conduitMode">Conduit mode</label>
+                            <select class="settings-select" id="conduitMode">
+                                <option value="public">Public relays</option>
+                                <option value="shirokhorshid">Community (personal compartment)</option>
+                                <option value="auto">Auto (community then public)</option>
+                            </select>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-row-label">Reject censored-country conduit peers</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="rejectCensoredCountryProxies" checked>
+                                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                            </label>
+                        </div>
+                        <p class="settings-desc">
+                            Conduit can take several minutes to find an in-proxy peer. Place
+                            <code>GeoLite2-Country.mmdb</code> in <code>~/.config/psiphonlinuxgui/</code> for country filtering.
+                        </p>
+                    </div>
+                </section>
+
+                <section class="settings-card upstream-proxy-section">
+                    <h2 class="settings-card-title">Upstream proxy</h2>
+
+                    <div class="hint-box" id="hint-upstream">
+                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                        <span>Disconnect the tunnel before changing upstream proxy settings.</span>
+                    </div>
+
+                    <div class="settings-row">
+                        <span class="settings-row-label">Use upstream proxy to reach Psiphon servers</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="upstreamProxyEnabled">
+                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        </label>
+                    </div>
+
+                    <p class="settings-desc">
                         Routes Psiphon tunnel traffic through your network proxy (HTTP, SOCKS5, or SOCKS4).
-                        Browsers still use the local proxy at 127.0.0.1:8081 when connected.
+                        Browsers still use the local proxy at <code>127.0.0.1:8081</code> when connected.
                     </p>
 
                     <div id="upstream-proxy-fields" class="upstream-proxy-fields">
-                        <div class="form-group upstream-form-row">
+                        <div class="settings-field">
                             <label for="upstreamProxyType">Proxy type</label>
-                            <select id="upstreamProxyType">
+                            <select class="settings-select" id="upstreamProxyType">
                                 <option value="http">HTTP (CONNECT)</option>
                                 <option value="socks5">SOCKS5</option>
                                 <option value="socks4a">SOCKS4</option>
                             </select>
                         </div>
 
-                        <div class="form-group upstream-form-row upstream-host-port">
-                            <div class="upstream-field-half">
+                        <div class="settings-field-grid">
+                            <div class="settings-field">
                                 <label for="upstreamProxyHost">Host</label>
-                                <input type="text" id="upstreamProxyHost" placeholder="proxy.example.com" />
+                                <input class="settings-input" type="text" id="upstreamProxyHost" placeholder="proxy.example.com" />
                             </div>
-                            <div class="upstream-field-half">
+                            <div class="settings-field">
                                 <label for="upstreamProxyPort">Port</label>
-                                <input type="number" id="upstreamProxyPort" placeholder="8080" min="1" max="65535" />
+                                <input class="settings-input" type="number" id="upstreamProxyPort" placeholder="8080" min="1" max="65535" />
                             </div>
                         </div>
 
-                        <div class="form-group upstream-form-row upstream-host-port">
-                            <div class="upstream-field-half">
+                        <div class="settings-field-grid">
+                            <div class="settings-field">
                                 <label for="upstreamProxyUsername">Username (optional)</label>
-                                <input type="text" id="upstreamProxyUsername" placeholder="user" autocomplete="off" />
+                                <input class="settings-input" type="text" id="upstreamProxyUsername" placeholder="user" autocomplete="off" />
                             </div>
-                            <div class="upstream-field-half">
+                            <div class="settings-field">
                                 <label for="upstreamProxyPassword">Password (optional)</label>
-                                <input type="password" id="upstreamProxyPassword" placeholder="••••••" autocomplete="off" />
+                                <input class="settings-input" type="password" id="upstreamProxyPassword" placeholder="••••••" autocomplete="off" />
                             </div>
                         </div>
                     </div>
-                </div>
-
+                </section>
             </div>
 
-            <!-- EDITED BROWSERSLIST PAGE -->
-            <div class="page" id="browser-list">
+            <!-- BROWSERS -->
+            <div class="settings-page" id="browser-list">
                 <div class="hint-box" id="hint1">
-                    To change the browser list, please turn off the proxy server.
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    <span>Disconnect the tunnel before editing the browser list.</span>
                 </div>
+
                 <div class="settings-actions">
-                    <button class="new-btn">New</button>
-                    <button class="reset-btn">Reset to default</button>
-                    <button class="save-btn" disabled>Save</button>
+                    <button type="button" class="btn btn-accent new-btn">
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i> New
+                    </button>
+                    <button type="button" class="btn btn-muted reset-btn">Reset to default</button>
+                    <button type="button" class="btn btn-primary save-btn" disabled>Save order</button>
                 </div>
-                <div class="setting-browser-list">
-                </div>
 
-            </div>
-            <div class="modal hidden" id="new-browser-modal">
-                <div class="modal-content">
-
-                    <h3>Create new browser entry</h3>
-
-                    <div class="form-group">
-                        <label> Name </label>
-                        <input type="text" id="browser-name" placeholder="Firefox" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Icon</label>
-
-                        <div class="icon-selector">
-
-                            <div class="icon-preview-box">
-                                <span id="icon-preview-placeholder">Icon Preview</span>
-                                <span id="icon-preview"></span>
-                            </div>
-
-                            <div class="icon-inputs">
-
-                                <label class="radio-option">
-                                    <input type="radio" name="iconType" value="css" checked />
-                                    Use CSS Icon (FontAwesome)
-                                </label>
-
-                                <label class="radio-option">
-                                    <input type="radio" name="iconType" value="local" />
-                                    Use Local Icon
-                                </label>
-                                <input type="text" id="icon" placeholder="fab fa-firefox" />
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Add a script that changes the browser’s proxy settings</label>
-                        <input type="text" id="start-script" placeholder="/home/user/proxy-firefox-on.sh" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Add a script that restores the browser’s proxy settings</label>
-                        <input type="text" id="stop-script" placeholder="/home/user/proxy-firefox-off.sh" />
-                    </div>
-                    <div class="script-hint" id="script-hint">
-                        If the new browser is Firefox-based or Chromium-based,
-                        use the corresponding scripts from the default configuration
-                        as a reference. You can find them in the
-                        <a href="https://github.com/Alessandros-Hube/PsiphonLinuxGUI/tree/main/scripts"
-                            target="_blank">scripts</a> folder of the project repository.
-                    </div>
-
-                    <div class="modal-actions">
-                        <button class="cancel-btn">Cancel</button>
-                        <button class="create-btn" disabled>Create</button>
-                    </div>
-
-                </div>
+                <section class="settings-card settings-card-list">
+                    <div class="setting-browser-list"></div>
+                </section>
             </div>
 
-            <div class="page" id="about-page">
-                <div class="about-container">
+            <!-- ABOUT -->
+            <div class="settings-page" id="about-page">
+                <div class="about-hero">
+                    <h2 class="about-name">PsiphonLinuxGUI</h2>
+                    <p class="about-tagline">Unofficial Psiphon frontend for Linux</p>
+                </div>
 
-                    <div class="logo-area">
-                        <div class="logo-text">
-                            <h1>PsiphonLinuxGUI</h1>
-                            <p class="tagline">Unofficial Psiphon Frontend for Linux</p>
+                <div class="hint-box" id="hint2">
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    <span>Disconnect the tunnel before updating.</span>
+                </div>
+
+                <div class="version-grid">
+                    <div class="version-card" id="gui-card">
+                        <div class="version-card-header">
+                            <span class="version-card-label">Frontend</span>
+                            <span class="status-badge" id="gui-status-badge">checking…</span>
                         </div>
-                    </div>
-                    <div class="hint-box" id="hint2">
-                        To update, please turn off the proxy server.
-                    </div>
-                    <div class="version-grid">
-
-                        <!-- Frontend Card -->
-                        <div class="version-card" id="gui-card">
-                            <div class="card-header">
-                                <span class="card-label">Frontend</span>
-                                <span class="status-badge" id="gui-status-badge">checking...</span>
-                            </div>
-                            <div class="version-row">
-                                <span class="version-label">Installed</span>
-                                <span class="version-value" id="gui-current">–</span>
-                            </div>
-                            <div class="version-row">
-                                <span class="version-label">Latest</span>
-                                <span class="version-value" id="gui-latest">–</span>
-                            </div>
-                            <a style="text-decoration: none;"
-                                href="https://github.com/Alessandros-Hube/PsiphonLinuxGUI/releases/latest"
-                                target="_blank">
-                                <button class="update-btn" id="gui-update-btn" disabled>
-                                    <span class="btn-icon">↑</span>
-                                    <span class="btn-text">Update Frontend</span>
-                                </button>
-                            </a>
-                            <div class="update-info" id="gui-update-info"></div>
+                        <div class="version-row">
+                            <span class="version-row-label">Installed</span>
+                            <span class="version-row-value" id="gui-current">–</span>
                         </div>
-
-                        <!-- Backend Card -->
-                        <div class="version-card" id="backend-card">
-                            <div class="card-header">
-                                <span class="card-label">Backend</span>
-                                <span class="status-badge" id="backend-status-badge">checking...</span>
-                            </div>
-                            <div class="version-row">
-                                <span class="version-label">Installed</span>
-                                <span class="version-value mono" id="backend-current">–</span>
-                            </div>
-                            <div class="version-row">
-                                <span class="version-label">Latest</span>
-                                <span class="version-value mono" id="backend-latest">–</span>
-                            </div>
-                            <button class="update-btn" id="backend-update-btn" disabled>
-                                <span class="btn-icon">↑</span>
-                                <span class="btn-text">Update Backend</span>
+                        <div class="version-row">
+                            <span class="version-row-label">Latest</span>
+                            <span class="version-row-value" id="gui-latest">–</span>
+                        </div>
+                        <a class="version-update-link" href="https://github.com/Alessandros-Hube/PsiphonLinuxGUI/releases/latest" target="_blank" rel="noopener">
+                            <button type="button" class="btn btn-primary btn-block update-btn" id="gui-update-btn" disabled>
+                                <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+                                <span>Update frontend</span>
                             </button>
-                            <div class="update-info" id="backend-update-info"></div>
-                            <div class="progress-bar-wrap" id="backend-progress-wrap" style="display:none">
-                                <div class="progress-bar" id="backend-progress-bar"></div>
-                                <span class="progress-label" id="backend-progress-label">Downloading...</span>
-                            </div>
+                        </a>
+                        <p class="version-info" id="gui-update-info"></p>
+                    </div>
+
+                    <div class="version-card" id="backend-card">
+                        <div class="version-card-header">
+                            <span class="version-card-label">Backend</span>
+                            <span class="status-badge" id="backend-status-badge">checking…</span>
                         </div>
-
+                        <div class="version-row">
+                            <span class="version-row-label">Installed</span>
+                            <span class="version-row-value version-mono" id="backend-current">–</span>
+                        </div>
+                        <div class="version-row">
+                            <span class="version-row-label">Latest</span>
+                            <span class="version-row-value version-mono" id="backend-latest">–</span>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-block update-btn" id="backend-update-btn" disabled>
+                            <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+                            <span>Update backend</span>
+                        </button>
+                        <p class="version-info" id="backend-update-info"></p>
+                        <div class="progress-wrap" id="backend-progress-wrap" hidden>
+                            <div class="progress-track">
+                                <div class="progress-bar" id="backend-progress-bar"></div>
+                            </div>
+                            <span class="progress-label" id="backend-progress-label">Downloading…</span>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="links-row">
-                        <a class="link-pill" id="link-gui" href="https://github.com/Alessandros-Hube/PsiphonLinuxGUI"
-                            target="_blank"><i class="fa-brands fa-github"></i>GitHub Frontend</a>
-                        <a class="link-pill" id="link-backend"
-                            href="https://github.com/Psiphon-Labs/psiphon-tunnel-core-binaries/tree/master/linux"
-                            target="_blank"> <i class="fa-brands fa-github"></i>GitHub Backend</a>
-                        <a class="link-pill" id="link-psiphon" href="https://www.psiphon.ca" target="_blank">
-                            <i class="fa-solid fa-globe"></i>psiphon.ca</a>
+                <div class="links-row">
+                    <a class="link-pill" id="link-gui" href="https://github.com/Alessandros-Hube/PsiphonLinuxGUI" target="_blank" rel="noopener">
+                        <i class="fa-brands fa-github" aria-hidden="true"></i> GitHub Frontend
+                    </a>
+                    <a class="link-pill" id="link-backend" href="https://github.com/Psiphon-Labs/psiphon-tunnel-core-binaries/tree/master/linux" target="_blank" rel="noopener">
+                        <i class="fa-brands fa-github" aria-hidden="true"></i> GitHub Backend
+                    </a>
+                    <a class="link-pill" id="link-psiphon" href="https://www.psiphon.ca" target="_blank" rel="noopener">
+                        <i class="fa-solid fa-globe" aria-hidden="true"></i> psiphon.ca
+                    </a>
+                </div>
+
+                <p class="license-note">Released under the MIT License · Not affiliated with Psiphon Inc.</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- New browser modal -->
+    <div class="modal-overlay hidden" id="new-browser-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-box">
+            <h3 id="modal-title">Create browser entry</h3>
+
+            <div class="settings-field">
+                <label for="browser-name">Name</label>
+                <input class="settings-input" type="text" id="browser-name" placeholder="Firefox" />
+            </div>
+
+            <div class="settings-field">
+                <label>Icon</label>
+                <div class="icon-selector">
+                    <div class="icon-preview-box">
+                        <span id="icon-preview-placeholder">Preview</span>
+                        <span id="icon-preview"></span>
                     </div>
-
-                    <p class="license-note">Released under the MIT License · Not affiliated with Psiphon Inc.</p>
-
+                    <div class="icon-inputs">
+                        <label class="radio-option">
+                            <input type="radio" name="iconType" value="css" checked />
+                            CSS icon (Font Awesome)
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="iconType" value="local" />
+                            Local image path
+                        </label>
+                        <input class="settings-input" type="text" id="icon" placeholder="fab fa-firefox" />
+                    </div>
                 </div>
             </div>
 
+            <div class="settings-field">
+                <label for="start-script">Proxy on script</label>
+                <input class="settings-input" type="text" id="start-script" placeholder="/home/user/proxy-firefox-on.sh" />
+            </div>
+
+            <div class="settings-field">
+                <label for="stop-script">Proxy off script</label>
+                <input class="settings-input" type="text" id="stop-script" placeholder="/home/user/proxy-firefox-off.sh" />
+            </div>
+
+            <p class="settings-desc script-hint" id="script-hint">
+                For Firefox- or Chromium-based browsers, use scripts from the
+                <a href="https://github.com/Alessandros-Hube/PsiphonLinuxGUI/tree/main/scripts" target="_blank" rel="noopener">scripts</a>
+                folder as a reference.
+            </p>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-muted cancel-btn">Cancel</button>
+                <button type="button" class="btn btn-primary create-btn" disabled>Create</button>
+            </div>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const sidebarItems = document.querySelectorAll('.setting-sidebar-item');
-            const pages = document.querySelectorAll('.page');
+            const navItems = document.querySelectorAll('.settings-nav-item');
+            const pages = document.querySelectorAll('.settings-page');
 
-            if (sidebarItems.length === 0 || pages.length === 0) {
-                console.error('Sidebar items or pages not found');
-                return;
-            }
-
-            sidebarItems.forEach(item => {
+            navItems.forEach((item) => {
                 item.addEventListener('click', () => {
                     const target = item.getAttribute('data-page');
-
-                    // Set sidebar active
-                    sidebarItems.forEach(i => i.classList.remove('active'));
+                    navItems.forEach((i) => i.classList.remove('active'));
                     item.classList.add('active');
-
-                    // Switch pages
-                    pages.forEach(page => {
-                        if (page.id == target) {
-                            page.classList.add('active');
-                        } else {
-                            page.classList.remove('active');
-                        }
+                    pages.forEach((page) => {
+                        page.classList.toggle('active', page.id === target);
                     });
                 });
             });
         });
     </script>
-
     <script src="settings.js"></script>
-
 </body>
-
 </html>

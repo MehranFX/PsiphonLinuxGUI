@@ -6,6 +6,9 @@ const {
     createPsiphonConfig,
     fileUrlFromPath,
     getGUIUpdateInfo,
+    getTransportSettings,
+    transportSelectionLabel,
+    getConnectionTimeoutMs,
     initBackend,
     iconsDir,
 } = require('../../util');
@@ -27,6 +30,9 @@ let isProxyServerRunning = false;
 let isPortFree = true;
 let proxyStartTimeout;
 let liveLogLines = [];
+let tunnelStatus = { protocol: '', serverRegion: '' };
+let connectionTimerId = null;
+let connectionStartedAt = 0;
 
 localStorage.setItem("currentStateIndex", currentStateIndex); // Save initial state to localStorage
 
@@ -44,8 +50,12 @@ function nextState() {
             clearTimeout(proxyStartTimeout); // Clear any existing timeouts
             showProxyWarningText(false);
             updateIpInfo('---', '---', null, '---');
+            tunnelStatus = { protocol: '', serverRegion: '' };
+            updateTunnelStatusDisplay();
             break;
         case 1: // STARTING state
+            tunnelStatus = { protocol: '', serverRegion: '' };
+            updateTunnelStatusDisplay();
             const country = document.getElementById('customSelect').getAttribute("data-value");
             if (localStorage.getItem("country") == "true") {
                 localStorage.setItem("latestCountry", country);
@@ -62,9 +72,13 @@ function nextState() {
 
                 proxyStartTimeout = setTimeout(() => {
                     if (!isProxyServerRunning) {
+                        const warning = document.getElementById('proxyWarning');
+                        if (warning) {
+                            warning.textContent = `${t('warning.server')} ${t('warning.server.hint')}`;
+                        }
                         showProxyWarning();
                     }
-                }, 10000);
+                }, getConnectionTimeoutMs(getTransportSettings()));
             } else {
                 currentStateIndex = -1;
                 nextState();
@@ -125,6 +139,8 @@ ipcRenderer.on('server-error', (event, err) => {
 // Listener for handling proxy watch responses
 ipcRenderer.on('proxy-watch', (event, response) => {
     const res = response.toString();
+    const warningEl = document.getElementById('proxyWarning');
+
     if (res === "HTTP:OK" && !isProxyServerRunning) {
         clearTimeout(proxyStartTimeout);
         isProxyServerRunning = true;
@@ -135,8 +151,25 @@ ipcRenderer.on('proxy-watch', (event, response) => {
         currentStateIndex = 0;
         nextState();
     }
-    document.getElementById('proxyWarning').textContent =
-        res === 'HTTP:DOWN' ? t('warning.server') : t('warning.network');
+
+    if (!warningEl) {
+        return;
+    }
+
+    if (currentStateIndex === 1 && !isProxyServerRunning) {
+        warningEl.textContent = res === 'DEVICE:DOWN' ? t('warning.network') : t('connect.hint.starting');
+        return;
+    }
+
+    warningEl.textContent = res === 'HTTP:DOWN' ? t('warning.server') : t('warning.network');
+});
+
+ipcRenderer.on('tunnel-status', (_event, status) => {
+    tunnelStatus = {
+        protocol: status?.protocol || '',
+        serverRegion: status?.serverRegion || '',
+    };
+    updateTunnelStatusDisplay();
 });
 
 // Listener for handling port errors
@@ -200,6 +233,42 @@ function setLocationDisplay(value) {
     customSelect.setAttribute('data-value', value);
     document.getElementById('locationFlag').innerHTML = getLocationIconMarkup(value, optionEl);
     document.getElementById('locationName').textContent = getLocationLabel(value, optionEl);
+    syncCountryListSelection();
+}
+
+function syncCountryListSelection() {
+    const customSelect = document.getElementById('customSelect');
+    const value = customSelect?.getAttribute('data-value') ?? '';
+    const options = document.querySelectorAll('#customOptions div');
+
+    options.forEach((option) => {
+        const isSelected = option.getAttribute('data-value') === value;
+        option.classList.toggle('selected', isSelected);
+        option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    });
+
+    return getCountryOption(value);
+}
+
+function scrollCountryListToSelection() {
+    const selectedEl = syncCountryListSelection();
+    if (!selectedEl) {
+        return;
+    }
+    requestAnimationFrame(() => {
+        selectedEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+}
+
+function setCountryListOpen(open) {
+    const wrapper = document.getElementById('countrySelectWrapper');
+    if (!wrapper) {
+        return;
+    }
+    wrapper.classList.toggle('open', open);
+    if (open) {
+        scrollCountryListToSelection();
+    }
 }
 
 function restoreCountrySelection() {
@@ -240,6 +309,33 @@ function updateStateDisplay() {
     statusHint.textContent = state === 'STARTED' ? t('connect.hint.started') : (state === 'STARTING' ? t('connect.hint.starting') : t('connect.hint'));
 
     updateConnectIpVisibility();
+    updateTunnelStatusDisplay();
+}
+
+function updateTunnelStatusDisplay() {
+    const transport = transportSelectionLabel(getTransportSettings().protocolSelection);
+    const protocol = tunnelStatus.protocol || '—';
+    const region = tunnelStatus.serverRegion || '—';
+    const isActive = currentStateIndex === 1 || currentStateIndex === 2;
+    const protocolText = (currentStateIndex === 1 && !tunnelStatus.protocol)
+        ? t('connection.protocol.pending')
+        : protocol;
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    setText('tunnel-transport-mode', transport);
+    setText('tunnel-protocol', isActive ? protocolText : '—');
+    setText('tunnel-server-region', isActive && tunnelStatus.serverRegion ? region : '—');
+    setText('connectTunnelProtocol', isActive ? protocolText : '—');
+    setText('connectTunnelRegion', isActive && tunnelStatus.serverRegion ? region : '—');
+
+    const meta = document.getElementById('connectTunnelMeta');
+    if (meta) {
+        meta.classList.toggle('hidden', !isActive);
+    }
 }
 
 function updateConnectIpVisibility() {
@@ -253,6 +349,63 @@ function updateConnectIpVisibility() {
     }
 }
 
+function formatConnectionDuration(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) {
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function updateConnectTimerDisplay() {
+    const el = document.getElementById('connectTimer');
+    if (!el || !connectionStartedAt) {
+        return;
+    }
+    el.textContent = formatConnectionDuration(Date.now() - connectionStartedAt);
+    const btn = document.getElementById('nextStateButton');
+    if (btn && states[currentStateIndex] === 'STARTED') {
+        btn.setAttribute('aria-label', `${t('btn.disconnect')} — ${el.textContent}`);
+    }
+}
+
+function startConnectionTimer() {
+    if (connectionTimerId) {
+        return;
+    }
+    connectionStartedAt = Date.now();
+    const el = document.getElementById('connectTimer');
+    if (el) {
+        el.classList.remove('hidden');
+        updateConnectTimerDisplay();
+    }
+    connectionTimerId = setInterval(updateConnectTimerDisplay, 1000);
+}
+
+function stopConnectionTimer() {
+    if (connectionTimerId) {
+        clearInterval(connectionTimerId);
+        connectionTimerId = null;
+    }
+    connectionStartedAt = 0;
+    const el = document.getElementById('connectTimer');
+    if (el) {
+        el.classList.add('hidden');
+        el.textContent = '00:00';
+    }
+}
+
+function syncConnectionTimer(state) {
+    if (state === 'STARTED') {
+        startConnectionTimer();
+    } else {
+        stopConnectionTimer();
+    }
+}
+
 function updatePowerButton() {
     const btn = document.getElementById('nextStateButton');
     const state = states[currentStateIndex];
@@ -261,14 +414,22 @@ function updatePowerButton() {
     const radiate = document.getElementById('powerRadiate');
 
     btn.className = 'power-btn ' + (state === 'STARTED' ? 'state-started' : (state === 'STARTING' ? 'state-starting' : 'state-stopped'));
+    btn.classList.toggle('has-timer', state === 'STARTED');
     glow.className = 'power-glow ' + (state === 'STARTED' ? 'state-started' : (state === 'STARTING' ? 'state-starting' : ''));
     ring.classList.toggle('pulse', false);
     if (radiate) {
         radiate.classList.toggle('active', state === 'STARTING');
     }
 
-    document.getElementById('Button').textContent =
-        state === 'STARTED' ? t('btn.disconnect') : (state === 'STARTING' ? t('btn.stop') : t('btn.connect'));
+    syncConnectionTimer(state);
+
+    const label = state === 'STARTED' ? t('btn.disconnect') : (state === 'STARTING' ? t('btn.stop') : t('btn.connect'));
+    document.getElementById('Button').textContent = label;
+    if (state === 'STARTED' && connectionStartedAt) {
+        btn.setAttribute('aria-label', `${label} — ${formatConnectionDuration(Date.now() - connectionStartedAt)}`);
+    } else {
+        btn.setAttribute('aria-label', label);
+    }
 }
 
 // Function to update the icon
@@ -326,6 +487,7 @@ initCountrySelect();
 initBanner();
 initWindowHeightFit();
 updateStateDisplay();
+updateTunnelStatusDisplay();
 updatePowerButton();
 updateIcon();
 
@@ -642,6 +804,7 @@ function initLocale() {
             if (typeof renderLiveLog === 'function' && liveLogLines.length === 0) {
                 renderLiveLog();
             }
+            updateTunnelStatusDisplay();
         });
     }
     applyI18n();
@@ -652,28 +815,31 @@ function initCountrySelect() {
     const customSelect = document.getElementById('customSelect');
 
     customSelect.addEventListener('click', () => {
-        wrapper.classList.toggle('open');
+        setCountryListOpen(!wrapper.classList.contains('open'));
     });
 
     document.getElementById('toggleButton').addEventListener('click', (e) => {
         e.stopPropagation();
-        wrapper.classList.toggle('open');
+        setCountryListOpen(!wrapper.classList.contains('open'));
     });
 
     document.querySelectorAll('#customOptions div').forEach((option) => {
+        option.setAttribute('role', 'option');
         option.addEventListener('click', function () {
             const value = this.getAttribute('data-value');
             setLocationDisplay(value);
-            wrapper.classList.remove('open');
+            setCountryListOpen(false);
             changeCountry();
         });
     });
 
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.custom-select-wrapper')) {
-            wrapper.classList.remove('open');
+            setCountryListOpen(false);
         }
     });
+
+    syncCountryListSelection();
 }
 
 function initBanner() {

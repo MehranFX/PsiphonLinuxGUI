@@ -21,6 +21,7 @@ const { execSync, spawn } = require('child_process');
 const { ipcMain } = require('electron');
 const { getScript, appBackendDir, iconsDir } = require('./util');
 const { setSystemProxy, clearSystemProxy, isGsettingsAvailable } = require('./systemProxy');
+const { parseTunnelNoticeLines, mergeTunnelStatus } = require('./tunnelNoticeParser');
 
 const psiphonPath = path.join(appBackendDir, 'psiphon.sh');
 const checkPort = path.join(appBackendDir, 'check-port.sh');
@@ -29,6 +30,40 @@ const proxyWatch = path.join(appBackendDir, 'proxy-watch.sh');
 const LOG_BUFFER_MAX = 400;
 const logBuffer = [];
 let systemProxyEnabled = false;
+let activeTunnelStatus = { protocol: '', serverRegion: '' };
+
+function sendTunnelStatus() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+    }
+    mainWindow.webContents.send('tunnel-status', { ...activeTunnelStatus });
+}
+
+function clearTunnelStatus() {
+    activeTunnelStatus = { protocol: '', serverRegion: '' };
+    sendTunnelStatus();
+}
+
+function handleTunnelStdout(msg, event) {
+    const notices = parseTunnelNoticeLines(msg);
+    if (!notices.length) {
+        return;
+    }
+    const { status, changed } = mergeTunnelStatus(activeTunnelStatus, notices);
+    if (!changed) {
+        return;
+    }
+    activeTunnelStatus = status;
+    if (event) {
+        event.reply('tunnel-status', { ...activeTunnelStatus });
+    } else {
+        sendTunnelStatus();
+    }
+    if (activeTunnelStatus.protocol) {
+        const region = activeTunnelStatus.serverRegion || '?';
+        pushLog('tunnel', `Connected via ${activeTunnelStatus.protocol} (server ${region})`);
+    }
+}
 
 function formatLogTime() {
     return new Date().toLocaleTimeString('en-GB', { hour12: false });
@@ -276,11 +311,22 @@ function executeScripts(proxySettings, scriptType, event) {
 
 // Function to execute start/stop script for changing proxy settings
 function executeStartStopScript(command, args, event) {
+    const isTunnelStart = String(command).includes('psiphon') && args[0] === 'start';
+    const isTunnelStop = String(command).includes('psiphon') && args[0] === 'stop';
+
+    if (isTunnelStart) {
+        clearTunnelStatus();
+    } else if (isTunnelStop) {
+        clearTunnelStatus();
+    }
+
     runProcess({
         command,
         args,
         label: `${command} ${args[0]}`,
         event,
+        onStdOut: isTunnelStart ? (msg, ev) => handleTunnelStdout(msg, ev) : undefined,
+        onStdErr: isTunnelStart ? (msg, ev) => handleTunnelStdout(msg, ev) : undefined,
         onError: (err, event) => {
             if (event && err.toString().includes('EACCES')) {
                 event.reply('server-error', err);
@@ -412,18 +458,40 @@ process.on('exit', () => {
     executeStartStopScript(psiphonPath, ['stop'], null);
 });
 
+function getWorkAreaForWindow(bounds) {
+    const point = {
+        x: bounds.x + Math.floor(bounds.width / 2),
+        y: bounds.y + Math.floor(bounds.height / 2),
+    };
+    return screen.getDisplayNearestPoint(point).workArea;
+}
+
 ipcMain.on('fit-window-height', (_event, height) => {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return;
     }
 
-    const { workArea } = screen.getPrimaryDisplay();
-    const width = mainWindow.getBounds().width;
+    const current = mainWindow.getBounds();
+    const workArea = getWorkAreaForWindow(current);
     const clamped = Math.min(
         workArea.height - 24,
         Math.max(MAIN_WINDOW_MIN_HEIGHT, Math.round(height)),
     );
-    const { x, y } = getPrimaryCenteredBounds(width, clamped);
+
+    let { x, y, width } = current;
+
+    if (y + clamped > workArea.y + workArea.height) {
+        y = workArea.y + workArea.height - clamped;
+    }
+    if (y < workArea.y) {
+        y = workArea.y;
+    }
+    if (x + width > workArea.x + workArea.width) {
+        x = workArea.x + workArea.width - width;
+    }
+    if (x < workArea.x) {
+        x = workArea.x;
+    }
 
     mainWindow.setBounds({ x, y, width, height: clamped });
 });

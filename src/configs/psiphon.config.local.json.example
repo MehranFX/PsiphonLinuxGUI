@@ -1,0 +1,7 @@
+{
+  "ServerEntrySignaturePublicKey": "YOUR_SERVER_ENTRY_SIGNATURE_PUBLIC_KEY",
+  "RemoteServerListURLs": [
+    "https://example.com/server_list_compressed"
+  ],
+  "ConduitPersonalCompartmentID": "OPTIONAL_COMMUNITY_COMPARTMENT_ID"
+}

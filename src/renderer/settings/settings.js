@@ -1,4 +1,6 @@
 const { ipcRenderer } = require('electron');
+const path = require('path');
+const os = require('os');
 const {
     checkBackendUpdate,
     createBrowserList,
@@ -9,30 +11,52 @@ const {
     getGUIUpdateInfo,
     getUpstreamProxySettings,
     UPSTREAM_PROXY_STORAGE_KEYS,
+    getTransportSettings,
+    TRANSPORT_STORAGE_KEYS,
+    PROTOCOL_SELECTION,
+    CONDUIT_MODE,
+    CONDUIT_BLOCKED_MESSAGE,
+    conduitDistributorReadiness,
     updateBackend,
-    writeFileSafe
+    writeFileSafe,
+    probeBackendCapabilities,
+    getCdnFrontingModeHint,
 } = require('../../util');
+const { mergeConfigOverlay } = require('../../transportConfig');
 
 const modal = document.getElementById('new-browser-modal');
 const iconInput = document.getElementById('icon');
 
-// Function to change the theme when the user selects an option
+function themeValueFromIndex(themeIndex) {
+    if (Number(themeIndex) === 1) return 'light';
+    if (Number(themeIndex) === 2) return 'dark';
+    return 'auto';
+}
+
+function themeIndexFromValue(value) {
+    if (value === 'light') return 1;
+    if (value === 'dark') return 2;
+    return 0;
+}
+
+function applyThemeClass(value) {
+    document.body.classList.remove('light', 'dark', 'auto');
+    document.body.classList.add(value === 'light' ? 'light' : (value === 'dark' ? 'dark' : 'auto'));
+}
+
 function changeTheme() {
-    const theme = document.getElementById('themeSelector').selectedIndex;
-    document.body.classList.remove("light", "dark", "auto");
-    document.body.classList.add((theme == 1 ? "light" : (theme == 2 ? "dark" : "auto")));
-    localStorage.setItem("theme", theme);
+    const value = document.getElementById('themeSelector').value;
+    applyThemeClass(value);
+    localStorage.setItem('theme', themeIndexFromValue(value));
     ipcRenderer.send('theme-updated');
 }
 
-// Add a click event listener to the dropdown to trigger theme change
-document.getElementById('themeSelector').addEventListener('click', changeTheme);
+document.getElementById('themeSelector').addEventListener('change', changeTheme);
 
-// Function to set the theme based on a saved value
 function setTheme(theme) {
-    document.body.classList.remove("light", "dark", "auto");
-    document.body.classList.add((theme == 1 ? "light" : (theme == 2 ? "dark" : "auto")));
-    document.getElementById('themeSelector').selectedIndex = theme;
+    const value = themeValueFromIndex(theme);
+    applyThemeClass(value);
+    document.getElementById('themeSelector').value = value;
 }
 
 // Load the saved theme from localStorage
@@ -101,6 +125,124 @@ function addUpstreamProxyListeners() {
 }
 addUpstreamProxyListeners();
 
+function updateTransportBackendHint() {
+    const hint = document.getElementById('transportBackendHint');
+    const protocol = document.getElementById('transportProtocol')?.value;
+    if (!hint) return;
+    if (protocol === PROTOCOL_SELECTION.cdnFronting) {
+        hint.hidden = false;
+        hint.textContent = getCdnFrontingModeHint();
+    } else {
+        hint.hidden = true;
+        hint.textContent = '';
+    }
+}
+
+function updateTransportSubsections(protocol) {
+    const cdnFields = document.getElementById('cdn-fronting-fields');
+    const conduitFields = document.getElementById('conduit-fields');
+    if (cdnFields) {
+        cdnFields.hidden = protocol !== PROTOCOL_SELECTION.cdnFronting;
+    }
+    if (conduitFields) {
+        conduitFields.hidden = protocol !== PROTOCOL_SELECTION.conduit;
+    }
+}
+
+function updateConduitReadinessUI() {
+    const select = document.getElementById('transportProtocol');
+    const warning = document.getElementById('conduitBlockedWarning');
+    const conduitOption = select?.querySelector('option[value="conduit"]');
+    const baseConfig = getConfig('psiphon.config');
+    if (!baseConfig || !select || !warning) {
+        return;
+    }
+    const readiness = conduitDistributorReadiness(mergeConfigOverlay(baseConfig));
+    const blocked = !readiness.allowsConduit;
+
+    if (conduitOption) {
+        conduitOption.disabled = blocked;
+    }
+    warning.hidden = !blocked;
+    warning.textContent = blocked ? CONDUIT_BLOCKED_MESSAGE : '';
+
+    if (blocked && select.value === PROTOCOL_SELECTION.conduit) {
+        select.value = PROTOCOL_SELECTION.auto;
+        saveTransportSettings();
+    }
+}
+
+function setTransportFieldsEnabled(enabled) {
+    const ids = [
+        'transportProtocol',
+        'cdnFrontingUseBuiltInScan',
+        'cdnFrontingCustomIpList',
+        'cdnFrontingCustomSni',
+        'conduitMode',
+        'rejectCensoredCountryProxies',
+    ];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !enabled;
+    });
+}
+
+function saveTransportSettings() {
+    const protocol = document.getElementById('transportProtocol').value;
+    localStorage.setItem(TRANSPORT_STORAGE_KEYS.protocol, protocol);
+    localStorage.setItem(
+        TRANSPORT_STORAGE_KEYS.cdnUseBuiltInScan,
+        document.getElementById('cdnFrontingUseBuiltInScan').checked
+    );
+    localStorage.setItem(
+        TRANSPORT_STORAGE_KEYS.cdnCustomIpList,
+        document.getElementById('cdnFrontingCustomIpList').value.trim()
+    );
+    localStorage.setItem(
+        TRANSPORT_STORAGE_KEYS.cdnCustomSni,
+        document.getElementById('cdnFrontingCustomSni').value.trim()
+    );
+    localStorage.setItem(TRANSPORT_STORAGE_KEYS.conduitMode, document.getElementById('conduitMode').value);
+    localStorage.setItem(
+        TRANSPORT_STORAGE_KEYS.rejectCensoredCountryProxies,
+        document.getElementById('rejectCensoredCountryProxies').checked
+    );
+    updateTransportSubsections(protocol);
+    updateTransportBackendHint();
+}
+
+function initTransportSettings() {
+    const settings = getTransportSettings();
+
+    document.getElementById('transportProtocol').value = settings.protocolSelection;
+    document.getElementById('cdnFrontingUseBuiltInScan').checked = settings.cdnFrontingUseBuiltInScan;
+    document.getElementById('cdnFrontingCustomIpList').value = settings.cdnFrontingCustomIpList;
+    document.getElementById('cdnFrontingCustomSni').value = settings.cdnFrontingCustomSni;
+    document.getElementById('conduitMode').value = settings.conduitMode;
+    document.getElementById('rejectCensoredCountryProxies').checked = settings.rejectCensoredCountryProxies;
+
+    updateTransportSubsections(settings.protocolSelection);
+    updateConduitReadinessUI();
+    updateTransportBackendHint();
+}
+initTransportSettings();
+probeBackendCapabilities(path.join(os.homedir(), '.config', 'psiphonlinuxgui', 'psiphon-tunnel-core-x86_64'));
+updateTransportBackendHint();
+
+function addTransportListeners() {
+    document.getElementById('transportProtocol').addEventListener('change', () => {
+        saveTransportSettings();
+        updateConduitReadinessUI();
+    });
+    document.getElementById('cdnFrontingUseBuiltInScan').addEventListener('change', saveTransportSettings);
+    document.getElementById('rejectCensoredCountryProxies').addEventListener('change', saveTransportSettings);
+    document.getElementById('conduitMode').addEventListener('change', saveTransportSettings);
+    ['cdnFrontingCustomIpList', 'cdnFrontingCustomSni'].forEach((id) => {
+        document.getElementById(id).addEventListener('input', saveTransportSettings);
+    });
+}
+addTransportListeners();
+
 // Add event listeners to each checkbox for status checking
 function addEventListener() {
     ["browserScrips", "country", "info"].forEach(key => {
@@ -145,16 +287,18 @@ document.addEventListener('DOMContentLoaded', () => {
 // Create the browser-item HTML containers for the browserListSetting
 function createBrowserListItem(browserConfig) {
     return browserConfig.map(browser => {
-        let iconHTML = browser.icon.localPath ?
-            `<span><img class="localPath" src="${browser.icon.localPath}" alt="${browser.name}"></span>` :
-            `<span class="${browser.icon.css}"></span>`;
+        const iconHTML = browser.icon.localPath
+            ? `<img class="browser-icon-img localPath" src="${browser.icon.localPath}" alt="">`
+            : `<span class="${browser.icon.css}"></span>`;
 
         return `
             <div class="browser-item">
-                <span class="drag-handle"><i class="fas fa-grip-lines"></i></span>
-                ${iconHTML}
-                <div class="toggle-text">${browser.name}</div>
-                <button class="remove-btn"><span class="fa-solid fa-x"></span></button>
+                <span class="drag-handle" title="Drag to reorder"><i class="fas fa-grip-lines"></i></span>
+                <div class="browser-info">
+                    ${iconHTML}
+                    <span class="toggle-text">${browser.name}</span>
+                </div>
+                <button type="button" class="remove-btn" title="Remove"><i class="fa-solid fa-xmark"></i></button>
             </div>`;
     }).join('');
 }
@@ -325,16 +469,16 @@ modal.querySelectorAll('input').forEach(input => {
 
 // Disable settings if not in STOPPED state
 if (localStorage.getItem("currentStateIndex") != 0) {
-    document.getElementById("hint1").style.display = 'block';
-    document.getElementById("hint-upstream").style.display = 'block';
-    document.querySelector(".settings-actions").style = 'margin-top: 10px';
-    document.querySelector(".setting-browser-list").style.height = "450px";
+    ['hint1', 'hint-transport', 'hint-upstream'].forEach((id) => {
+        document.getElementById(id)?.classList.add('show');
+    });
     document.querySelector(".new-btn").disabled = true;
     document.querySelector(".reset-btn").disabled = true;
     document.querySelector(".save-btn").disabled = true;
     document.querySelectorAll(".remove-btn").forEach(btn => btn.disabled = true);
     document.querySelectorAll(".drag-handle").forEach(handle => handle.style.display = "none");
     setUpstreamProxyFieldsEnabled(false);
+    setTransportFieldsEnabled(false);
     const upstreamIds = [
         'upstreamProxyEnabled',
         'upstreamProxyType',
@@ -390,7 +534,7 @@ async function checkForUpdateGUI() {
 
         if (result.hasUpdate) {
             if (localStorage.getItem("currentStateIndex") != 0) {
-                document.getElementById("hint2").style.display = 'block';
+                document.getElementById('hint2')?.classList.add('show');
             }
             setBadge('gui-status-badge', 'update-available');
             document.getElementById('gui-update-btn').disabled = localStorage.getItem("currentStateIndex") != 0;
@@ -431,7 +575,7 @@ async function checkForUpdateBackend() {
 
         if (result.hasUpdate) {
             if (localStorage.getItem("currentStateIndex") != 0) {
-                document.getElementById("hint2").style.display = 'block';
+                document.getElementById('hint2')?.classList.add('show');
             }
             setBadge('backend-status-badge', 'update-available');
             document.getElementById('backend-update-btn').disabled = localStorage.getItem("currentStateIndex") != 0;
@@ -459,7 +603,7 @@ document.getElementById('backend-update-btn').addEventListener('click', async ()
 
     btn.classList.add('loading');
     btn.disabled = true;
-    wrapEl.style.display = 'flex';
+    wrapEl.hidden = false;
     infoEl.textContent = '';
     infoEl.style.display = 'none';
 
@@ -487,11 +631,11 @@ document.getElementById('backend-update-btn').addEventListener('click', async ()
 
         barEl.style.width = '0%';
         labelEl.textContent = '';
-        wrapEl.style.display = 'none';
+        wrapEl.hidden = true;
     } catch (err) {
         barEl.style.width = '0%';
         labelEl.textContent = '';
-        wrapEl.style.display = 'none';
+        wrapEl.hidden = true;
         infoEl.style.display = 'block';
         infoEl.textContent = `Update failed: ${err.message ?? 'unknown error'}`;
         btn.classList.remove('loading');

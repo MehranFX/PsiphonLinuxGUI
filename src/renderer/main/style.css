@@ -602,9 +602,33 @@ body.light {
     z-index: 1;
 }
 
+.power-btn.has-timer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
 .power-icon {
     width: 40px;
     height: 40px;
+    flex-shrink: 0;
+}
+
+.power-btn.has-timer .power-icon {
+    width: 30px;
+    height: 30px;
+}
+
+.connect-timer {
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    direction: ltr;
+    color: var(--accent);
 }
 
 .power-btn.state-stopped:hover {
@@ -697,6 +721,53 @@ body.light {
     font-weight: 500;
     color: var(--text-muted);
     letter-spacing: 0;
+}
+
+.connect-tunnel-meta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.35;
+    direction: ltr;
+    max-width: 100%;
+}
+
+.connect-tunnel-meta.hidden {
+    display: none !important;
+}
+
+.connect-tunnel-meta-label {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    direction: ltr;
+}
+
+.connect-tunnel-meta-value {
+    font-weight: 700;
+    color: var(--accent);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.connect-tunnel-meta-sep {
+    color: var(--text-muted);
+}
+
+.connect-tunnel-meta-region {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+#tunnel-info {
+    margin-bottom: 4px;
 }
 
 .status-alert {
@@ -943,6 +1014,16 @@ html[dir="rtl"] .toggle input:checked + .toggle-track .toggle-thumb {
 }
 
 .custom-options div:hover { background: var(--bg-hover); }
+
+.custom-options div.selected {
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.custom-options div.selected:hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
 
 .custom-options .fi {
     width: 20px;

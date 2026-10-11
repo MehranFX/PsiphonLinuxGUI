@@ -4,6 +4,29 @@ const path = require('path');
 const os = require('os');
 const { pathToFileURL } = require('url');
 const { filterInstalledBrowsers } = require('./browserDetect');
+const {
+    getTransportSettings,
+    applyTransportSettings,
+    mergeConfigOverlay,
+    validateTransportSettings,
+    TRANSPORT_STORAGE_KEYS,
+    PROTOCOL_SELECTION,
+    CONDUIT_MODE,
+    CONDUIT_BLOCKED_MESSAGE,
+    conduitDistributorReadiness,
+    transportSelectionLabel,
+    probeBackendCapabilities,
+    getCdnFrontingModeHint: getTransportCdnHint,
+    getConnectionTimeoutMs: getTransportConnectionTimeoutMs,
+} = require('./transportConfig');
+
+function getCdnFrontingModeHint() {
+    return getTransportCdnHint(userBackendBinaryPath);
+}
+
+function getConnectionTimeoutMs(settings) {
+    return getTransportConnectionTimeoutMs(settings || getTransportSettings());
+}
 
 function getIpcRenderer() {
     try {
@@ -280,9 +303,11 @@ function validateUpstreamProxySettings(settings) {
 // Create the psiphon config
 function createPsiphonConfig(country) {
     try {
-        const psiphonConfig = getConfig('psiphon.config');
+        const baseConfig = getConfig('psiphon.config');
 
-        if (psiphonConfig) {
+        if (baseConfig) {
+            const psiphonConfig = mergeConfigOverlay(baseConfig);
+
             const upstreamSettings = getUpstreamProxySettings();
             const upstreamValidation = validateUpstreamProxySettings(upstreamSettings);
             if (!upstreamValidation.valid) {
@@ -290,7 +315,24 @@ function createPsiphonConfig(country) {
                 return false;
             }
 
-            psiphonConfig.EgressRegion = country;
+            const transportSettings = getTransportSettings();
+            const transportValidation = validateTransportSettings(
+                transportSettings,
+                psiphonConfig,
+                userBackendBinaryPath
+            );
+            if (!transportValidation.valid) {
+                notifyUser(transportValidation.message);
+                return false;
+            }
+
+            const region = (country || '').trim();
+            const skipRegionForCdn = transportSettings.protocolSelection === PROTOCOL_SELECTION.cdnFronting;
+            if (region && !skipRegionForCdn) {
+                psiphonConfig.EgressRegion = region;
+            } else {
+                delete psiphonConfig.EgressRegion;
+            }
 
             const upstreamUrl = buildUpstreamProxyURL(upstreamSettings);
             if (upstreamUrl) {
@@ -298,6 +340,9 @@ function createPsiphonConfig(country) {
             } else {
                 delete psiphonConfig.UpstreamProxyURL;
             }
+
+            applyTransportSettings(psiphonConfig, transportSettings, userBackendBinaryPath);
+            delete psiphonConfig._transportBackendProfile;
 
             const newPsiphonConfig = JSON.stringify(psiphonConfig, null, 2);
 
@@ -353,6 +398,8 @@ function initBackend() {
             copyFile(appBackendVersionConfigPath, userBackendVersionConfigPath);
             copyFile(appBackendBinaryPath, userBackendBinaryPath);
         }
+
+        probeBackendCapabilities(userBackendBinaryPath);
         return true;
     } catch (e) {
         notifyUser(
@@ -509,6 +556,16 @@ module.exports = {
     validateUpstreamProxySettings,
     getAppVersion,
     UPSTREAM_PROXY_STORAGE_KEYS,
+    TRANSPORT_STORAGE_KEYS,
+    PROTOCOL_SELECTION,
+    CONDUIT_MODE,
+    CONDUIT_BLOCKED_MESSAGE,
+    getTransportSettings,
+    conduitDistributorReadiness,
+    transportSelectionLabel,
+    probeBackendCapabilities,
+    getCdnFrontingModeHint,
+    getConnectionTimeoutMs,
     getConfig,
     getConfigPath,
     getDefaultBrowserConfig,

@@ -8,6 +8,7 @@
 - **Proxy Configuration:** Easily manage proxy settings for supported browsers.
 - **Dynamic Country Selection:** Choose from various countries to optimize your connection performance.
 - **Upstream Proxy:** Route Psiphon tunnel traffic through an HTTP, SOCKS5, or SOCKS4 proxy to reach Psiphon servers (e.g. corporate network proxy).
+- **CDN Fronting & Conduit:** Transport modes inspired by [AzadiTunnel](https://github.com/polamgh/AzadiTunnel) for censored networks — CDN fronting (Meek) and Conduit (in-proxy WebRTC).
 
 ## Installation
 
@@ -87,6 +88,20 @@ Configuration files are stored in the `configs` directory. Customize the base se
 
 ### Upstream proxy
 Open **Settings → General** and enable **Use upstream proxy to reach Psiphon servers**. Enter your proxy host, port, type (HTTP/SOCKS5/SOCKS4), and optional credentials. When you connect, `UpstreamProxyURL` is written to `~/.config/psiphonlinuxgui/psiphon.config`. Browsers still use the local proxy at `127.0.0.1:8081` after the tunnel is up.
+
+### Transport modes (CDN fronting & Conduit)
+Open **Settings → General → Transport mode**:
+
+| Mode | When to use |
+|------|-------------|
+| **Auto** | Default — tries all tunnel protocols. |
+| **Direct** | Direct protocols only (no CDN scan block). |
+| **CDN fronting** | Meek-only (`FRONTED-MEEK-*` then `UNFRONTED-MEEK-*` on Labs). **Country selection is ignored** — egress + Meek often has zero servers. Allow up to 3 minutes. |
+| **Conduit** | In-proxy WebRTC relays; can take several minutes to connect. |
+
+**Conduit** requires distributor keys in `~/.config/psiphonlinuxgui/psiphon.config.local.json` (see `src/configs/psiphon.config.local.json.example`). Copy the example, add `ServerEntrySignaturePublicKey` and `RemoteServerListURLs`. For community Conduit, also set `ConduitPersonalCompartmentID`.
+
+Optional: place `GeoLite2-Country.mmdb` in `~/.config/psiphonlinuxgui/` for Conduit country filtering. Extra CDN edge IPs can go in `cdn-fronting.local.json` in the same folder.
 
 ## License
 
