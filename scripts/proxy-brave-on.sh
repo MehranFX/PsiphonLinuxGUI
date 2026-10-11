@@ -3,7 +3,7 @@
 source "$(dirname "$0")/_helpers.sh"
 
 # Proxy settings
-PROXY_SERVER="http=localhost:8081;https=localhost:8081;socks=localhost:1081"
+PROXY_SERVER="http=localhost:$HTTP_PORT;https=localhost:$HTTP_PORT;socks=localhost:$SOCKS_PORT"
 
 # Check if Brave is installed natively
 if command -v brave &> /dev/null

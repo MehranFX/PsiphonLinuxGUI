@@ -86,7 +86,7 @@ function getDefaultFile(file) {
             defaultFile = path.join(appBackendDir, 'psiphon-tunnel-core-x86_64');
             break;
         default:
-            throw `Error: There are not default file for ${file} definit.`;
+            throw `Error: There is no default file defined for ${file}.`;
     }
     return defaultFile
 }
@@ -301,7 +301,7 @@ function validateUpstreamProxySettings(settings) {
 }
 
 // Create the psiphon config
-function createPsiphonConfig(country) {
+function createPsiphonConfig(country, upstreamProxyUrl = null) {
     try {
         const baseConfig = getConfig('psiphon.config');
 
@@ -343,6 +343,12 @@ function createPsiphonConfig(country) {
 
             applyTransportSettings(psiphonConfig, transportSettings, userBackendBinaryPath);
             delete psiphonConfig._transportBackendProfile;
+
+            if (upstreamProxyUrl) {
+                psiphonConfig.UpstreamProxyUrl = upstreamProxyUrl;
+            } else {
+                delete psiphonConfig.UpstreamProxyUrl;
+            }
 
             const newPsiphonConfig = JSON.stringify(psiphonConfig, null, 2);
 

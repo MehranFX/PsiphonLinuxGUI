@@ -61,9 +61,14 @@ function nextState() {
                 localStorage.setItem("latestCountry", country);
             }
 
+            let upstreamProxyUrl = null;
+            if (localStorage.getItem("upstream-proxy-enabled") == "true") {
+                upstreamProxyUrl = localStorage.getItem("upstreamProxyUrl") != "null" ? localStorage.getItem("upstreamProxyUrl") : null;
+            }
+
             // Create config based on the selected country and inti the backend
             const isBackendInit = initBackend();
-            if (createPsiphonConfig(country) && isBackendInit) {
+            if (createPsiphonConfig(country, upstreamProxyUrl) && isBackendInit) {
                 isPortFree = true;
                 updateIpInfo('Loading...', null, null, null);
                 ipcRenderer.send('start-vpn-proxy-server'); // Start the VPN/proxy server
@@ -578,6 +583,7 @@ ipcRenderer.on('refresh-browser-list', () => {
 // Listener for handling refresh info text
 ipcRenderer.on('refresh-info-text', () => {
     changeInfoText();
+    updatePortText();
 });
 
 // Function to change info text
@@ -895,6 +901,16 @@ async function checkForUpdate() {
     }
 }
 
+function updatePortText() {
+    document.querySelectorAll('.http').forEach(el=>{
+        el.textContent = localStorage.getItem("locale-proxy-port-http") ? localStorage.getItem("locale-proxy-port-http") : 8081;
+    });
+    document.querySelectorAll('.socks').forEach(el=>{
+        el.textContent = localStorage.getItem("locale-proxy-port-socks") ? localStorage.getItem("locale-proxy-port-socks") : 8081;
+    });
+}
+updatePortText();
+
 // Listener for handling ip info
 ipcRenderer.on('ip-info-result', (event, { ip, country, countryCode, city }) => {
     updateIpInfo(ip, country, countryCode, city);
@@ -902,7 +918,8 @@ ipcRenderer.on('ip-info-result', (event, { ip, country, countryCode, city }) => 
 
 // Function to get IP info
 function fetchIPInfo() {
-    ipcRenderer.send('fetch-ip-info');
+    const http = localStorage.getItem("locale-proxy-port-http") ? localStorage.getItem("locale-proxy-port-http") : 8081;
+    ipcRenderer.send('fetch-ip-info', parseInt(http));
 }
 
 function updateIpInfo(ip, country, countryCode, city) {

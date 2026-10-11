@@ -393,10 +393,10 @@ function getPortOccupiedMessage() {
 }
 
 // Function to get IP info via curl
-function fetchIPInfoViaCurl(event) {
+function fetchIPInfoViaCurl(event, http) {
     runProcess({
         command: 'bash',
-        args: ['-c', 'curl -s --max-time 10 --proxy http://127.0.0.1:8081 http://ip-api.com/json/'],
+        args: ['-c', `curl -s --max-time 10 --proxy http://127.0.0.1:${http} http://ip-api.com/json/`],
         label: 'Fetch IP Info',
         event,
         onStdOut: (msg, event) => {
@@ -510,8 +510,8 @@ ipcMain.on('open-settings-page', () => {
 });
 
 // Listener for getting IP info 
-ipcMain.on('fetch-ip-info', (event) => {
-    fetchIPInfoViaCurl(event);
+ipcMain.on('fetch-ip-info', (event, http) => {
+    fetchIPInfoViaCurl(event, http);
 });
 
 // Listener for starting the VPN/proxy server
